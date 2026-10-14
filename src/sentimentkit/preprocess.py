@@ -13,6 +13,17 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 
 _SENT_SPLIT = re.compile(r"(?<=[.!?…])\s+(?=[A-ZÄÖÜ«\"(0-9])")
+# _SENT_SPLIT also cuts German sentences in the middle: after a day or class
+# ordinal ("am 3. März") and after an abbreviation before a capitalised word
+# ("12 Mio. Franken", "z. B. Die", "St. Gallen"). A piece ending like this is
+# glued to the next one. A year ("im August 2026.") still ends a sentence.
+_FALSE_SPLIT = re.compile(
+    r"(?:(?<!\d)\d{1,2}|\b(?:z|bzw|ca|dr|prof|st|vgl|evtl|inkl|sog|resp|mio|mrd|jh))\.$",
+    re.IGNORECASE,
+)
+# Only when a number follows ("Art. 5 URG"): "Projekte dieser Art." is a
+# genuine sentence end.
+_FALSE_SPLIT_BEFORE_NUMBER = re.compile(r"\b(?:art|abs|nr|ziff)\.$", re.IGNORECASE)
 _TOKEN = re.compile(r"[A-Za-zÄÖÜäöüßÀ-ÿ']+|[!?]", re.UNICODE)
 
 STOPWORDS = {
@@ -65,9 +76,20 @@ def split_sentences(text: str) -> list[Sentence]:
         if start < 0:
             start = pos
         end = start + len(piece)
-        out.append(Sentence(piece, start, end))
+        if out and _is_false_split(out[-1].text, piece):
+            prev = out[-1]
+            out[-1] = Sentence(text[prev.start : end], prev.start, end)
+        else:
+            out.append(Sentence(piece, start, end))
         pos = end
     return out
+
+
+def _is_false_split(piece: str, following: str) -> bool:
+    return bool(
+        _FALSE_SPLIT.search(piece)
+        or (_FALSE_SPLIT_BEFORE_NUMBER.search(piece) and following[:1].isdigit())
+    )
 
 
 def tokenize(text: str) -> list[str]:

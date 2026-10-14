@@ -17,6 +17,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - `schema/gold.schema.json`: optional `source` field, so every gold instance keeps its provenance
 
+### Fixed
+- `preprocess.split_sentences` no longer ends a sentence after a German day or class ordinal ("am 3. März") or a common abbreviation ("12 Mio. Franken", "z. B.", "St. Gallen"); "Art.", "Abs.", "Nr." and "Ziff." only stay inside the sentence when a number follows. Offsets stay exact. The lexicon backend and `scripts/build_gold_candidates.py` (whose local repair step is gone) use the shared rule; the stage-0 eval numbers are unchanged
+
 ## [0.1.0] - 2026-10-14
 
 ### Added

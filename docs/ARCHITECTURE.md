@@ -39,6 +39,7 @@ und Fixed-Answer-Scoring eines LLM werden so vergleichbar.
 
 | Phänomen | Regel | Beispiel |
 |---|---|---|
+| Satzgrenze | Kein Satzende nach Ordinalzahl (1–2 Ziffern) oder gängiger Abkürzung; «Art.», «Abs.», «Nr.», «Ziff.» nur vor einer Zahl (`preprocess.split_sentences`) | «am 3. März», «12 Mio. Franken», «z. B.» |
 | Negation davor | Negator in den 5 Tokens vor dem Sentiment-Wort, rückwärts gesucht, Stopp an Teilsatzgrenze | «nicht gut», «kein Problem» |
 | Satzklammer | Negator *nach* dem Sentiment-Wort bis Teilsatzende, nur `nicht`/`nöd`/`nid`/`ned` | «… überhaupt nicht zufrieden» |
 | Kein Satzklammer-Flip bei Nomen | `nie`, `kein`, `ohne` negieren nach einem Nomen nicht das Nomen | «Problem wurde nie gelöst» bleibt negativ |
