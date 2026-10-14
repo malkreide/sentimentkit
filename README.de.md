@@ -12,11 +12,12 @@
 
 sentimentkit bestimmt die Tonalität von *Texten über Themen* — Medienberichte, offene Befragungsantworten, Anfragen, Ratsdebatten, die eigene Kommunikation — und nie den emotionalen Zustand einer Person. Jedes Urteil ist ein **Evidenz-Atom** mit vollständiger Provenienz (Backend, Modellversion, Prompt-Hash, Konfidenz, auslösende Tokens), jeder Lauf wird vor und nach dem Modell gegen eine **Policy-Datei** geprüft, und jedes Backend wird auf demselben **Gold-Set** gemessen, bevor es Default werden darf.
 
-Stufe 0 liefert eine transparente Lexikon-und-Regel-Baseline für Deutsch (Negation inkl. Satzklammer, Komposita, Verstärker, Kontrast, Schweizerdeutsch-Erkennung) und den Eval-Harness. Encoder, lokales LLM-Scoring (Fixed-Answer / Typed-Question-Muster) und Cloud-LLM folgen in Stufe 2 — siehe [docs/ROADMAP.md](docs/ROADMAP.md).
+Stufe 0 liefert eine transparente Lexikon-und-Regel-Baseline für Deutsch (Negation inkl. Satzklammer, Komposita, Verstärker, Kontrast, Schweizerdeutsch-Erkennung) und den Eval-Harness. Stufe 2 ergänzt ein lokales **Encoder**-Backend (feinjustierte Transformer-Klassifikatoren, standardmässig auf der CPU); lokales LLM-Scoring (Fixed-Answer / Typed-Question-Muster) und ein Cloud-LLM folgen — siehe [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Funktionen
 
-- **Austauschbare Backends** hinter einer Typed-Question-Schnittstelle: `lexicon` (verfügbar), `encoder`, `llm-score`, `llm-cloud` (Stufe 2); ein Tippfehler in `--backend` schlägt laut fehl
+- **Austauschbare Backends** hinter einer Typed-Question-Schnittstelle: `lexicon` und `encoder` (verfügbar), `llm-score`, `llm-cloud` (Stufe 2); ein Tippfehler in `--backend` schlägt laut fehl
+- **Backend-Vergleich** auf einem Gold-Set: `sentimentkit eval GOLD --compare lexicon,encoder` gibt Kennzahlen, Tag-Slices und das Stufe-2-Gate `eval.beats_baseline()` aus
 - **Evidenz-Atome** (`schema/judgement.schema.json`): Polarität, Intensität mit Vorzeichen, Konfidenz, Verteilung je Option, Evidenz-Hinweise, Provenienz, Felder für die menschliche Prüfung
 - **Aspektbasierte** Urteile aus einem YAML mit Typed Questions, mit Scoping auf Teilsatzebene («gut, aber der Mittagstisch ein Chaos»)
 - **Governance als Code** (`policy.yaml`): deklarierter Zweck, verbotene Dimensionen (politische Ausrichtung, Emotion einer Person, Biometrie), keine Personenprofile, k-Anonymitäts-Untergrenze bei der Aggregation, Anonymisierungspflicht für Cloud-Backends — Verstösse enden mit Exit 2
@@ -28,7 +29,8 @@ Stufe 0 liefert eine transparente Lexikon-und-Regel-Baseline für Deutsch (Negat
 ## Voraussetzungen
 
 - Python 3.10+
-- Keine Modell-Downloads in Stufe 0; das Lexikon-Backend läuft auf einem Raspberry Pi 5 oder jedem CI-Container
+- Das Lexikon-Backend braucht keinen Modell-Download und läuft auf einem Raspberry Pi 5 oder jedem CI-Container
+- Das Encoder-Backend braucht das optionale Extra `encoder` (PyTorch, transformers) und lädt sein Modell einmal herunter: 436 MB für den deutschen Default, 1.1 GB für die mehrsprachige Alternative
 
 ## Installation
 
@@ -36,6 +38,7 @@ Stufe 0 liefert eine transparente Lexikon-und-Regel-Baseline für Deutsch (Negat
 git clone https://github.com/malkreide/sentimentkit.git
 cd sentimentkit
 pip install -e ".[dev]"
+pip install -e ".[encoder]"   # optional: Encoder-Backend (PyTorch, transformers)
 ```
 
 ## Verwendung / Schnellstart
@@ -53,6 +56,9 @@ cat out/report.md
 
 # Baseline auf dem synthetischen Gold-Set messen
 sentimentkit eval fixtures/de_synthetic_gold.jsonl --backend lexicon
+
+# Backends auf demselben Gold-Set vergleichen; das erste ist die Baseline
+sentimentkit eval fixtures/de_synthetic_gold.jsonl --compare lexicon,encoder
 ```
 
 Baseline auf dem Fixture-Set der Stufe 0 (30 synthetische deutsche Sätze, zwei synthetische Annotierende):
@@ -85,13 +91,53 @@ Stufe 1 ersetzt das Fixture durch 300–500 reale Sätze aus öffentlichen Quell
    ```
 5. **Baseline messen:** `sentimentkit eval fixtures/gold_v1.jsonl --backend lexicon`
 
+## Encoder-Backend (Stufe 2)
+
+`--backend encoder` lässt einen feinjustierten Transformer-Klassifikator lokal laufen. Der Softmax über seine drei Klassen ist die `distribution` des Urteils, die höchste Wahrscheinlichkeit seine `confidence`, P(positiv) − P(negativ) seine `intensity`. Texte verlassen den Rechner nie; nur die Gewichte werden einmal vom Hugging Face Hub geladen (oder aus einem lokalen Verzeichnis gelesen). `decide_many` verarbeitet echte Batches, und `analyze` sowie `eval` gruppieren ihre Fragen je Aspekt, damit der Encoder ganze Batches erhält. Aspekte werden wie im Lexikon-Backend auf die Teilsätze beschränkt, die sie nennen; ohne Treffer lautet die Antwort `not_mentioned`, ohne Modelldurchlauf.
+
+| Modell | Sprachen | Lizenz | Gepinnte Revision |
+|---|---|---|---|
+| `oliverguhr/german-sentiment-bert` (Default) | Deutsch | MIT | `b1177ff59e30` |
+| `cardiffnlp/twitter-xlm-roberta-base-sentiment` (Französisch, Italienisch) | 8, u. a. de, fr, it | auf der Model Card nicht deklariert | `f2f1202b1bde` |
+
+Konfiguration über Umgebungsvariablen (oder Konstruktor-Argumente von `EncoderBackend`):
+
+| Variable | Default | Bedeutung |
+|---|---|---|
+| `SENTIMENTKIT_ENCODER_MODEL` | `oliverguhr/german-sentiment-bert` | Hub-ID oder lokales Verzeichnis |
+| `SENTIMENTKIT_ENCODER_REVISION` | gepinnter Commit der beiden Presets | Commit, Tag oder Branch |
+| `SENTIMENTKIT_ENCODER_DEVICE` | `cpu` | `cpu`, `cuda`, `mps` |
+| `SENTIMENTKIT_ENCODER_BATCH_SIZE` | `16` | Texte pro Modelldurchlauf |
+
+`model_version` lautet `<modell>@<commit>`; ein Branch oder Tag wird auf den Commit aufgelöst, aus dem die Gewichte tatsächlich geladen wurden. Beide Presets sind gepinnt, damit ein erneuter Upload auf dem Hub die Ergebnisse nicht unbemerkt verändert. Jedes Preset erhält die Textbereinigung seiner Trainingsdaten (`germansentiment`: nur Buchstaben, Ziffern ausgeschrieben, Kleinschreibung; XLM-R: Platzhalter für Nutzernamen und Links). Die Evidenz listet die Klassenwahrscheinlichkeiten und Hinweise: `DIALECT?`, `LANG?:fr` (Sprache ausserhalb der Modellsprachen), `TRUNCATED?` (Eingabe länger als 512 Tokens). Nach dem ersten Download offline: `HF_HUB_OFFLINE=1`. Das Backend schaltet die Safetensors-Konvertierung von transformers im Hintergrund ab, die sonst den Hub kontaktieren und eine konvertierte Kopie aus einem offenen Pull Request im Modell-Repo herunterladen würde.
+
+Gemessen auf dem Fixture-Set der Stufe 0 (30 synthetische deutsche Sätze; transformers 5.19, torch 2.14 CPU):
+
+| Kennzahl | lexicon | encoder, german-sentiment-bert | encoder, twitter-xlm-roberta |
+|---|---|---|---|
+| Accuracy | 0.933 | 0.633 | 0.900 |
+| Macro-F1 | 0.777 | 0.700 | 0.881 |
+| Cohen's κ vs. Gold | 0.892 | 0.488 | 0.840 |
+| ECE | 0.203 | 0.351 | 0.151 |
+| Slice Ironie (n=2) | 0.00 | 0.00 | 1.00 |
+| Slice Negation (n=7) | 1.00 | 0.86 | 0.57 |
+| alt-test ω | 0.50 (bestanden) | 0.00 (nicht bestanden) | 1.00 (bestanden) |
+| `eval.beats_baseline()` | — | nein (−0.077) | ja (+0.104) |
+
+Diese Zahlen mit Vorsicht lesen:
+
+- **Nicht das Gate der Stufe 2.** Das Fixture hat 30 Sätze und ist zusammen mit den Lexikon-Regeln entstanden, was das Lexikon begünstigt. Das Gate zählt auf dem Gold-Set der Stufe 1 (`fixtures/gold_v1.jsonl`), das es noch nicht gibt.
+- **Der deutsche Default irrt mit hoher Sicherheit.** 10 seiner 11 Fehler haben eine Konfidenz ≥ 0.9; meist stuft er wertende, aber sachlich formulierte Sätze als `neutral` ein. Auf der synthetischen Befragung schickt er 0 von 144 Urteilen in die Review-Queue (Lexikon: 10). Unkalibriert umgeht er das Human Gate — vor der Kalibrierung nicht für Berichte verwenden (Gate der Stufe 2: ECE < 0.10).
+- **Das mehrsprachige Modell** liegt auf diesem Fixture vorne, auch für Deutsch, und seine Fehler haben tiefe Konfidenz. Seine Model Card deklariert keine Lizenz; das vor einem produktiven Einsatz klären.
+
 ## Verfügbare Tools
 
 | Befehl | Beschreibung |
 |---|---|
 | `sentimentkit analyze INPUT --purpose P [--backend B] [--aspects A.yaml] [-o DIR]` | Jeden Text beurteilen; Atome, Run-Meta, Review-Queue und Report schreiben |
 | `sentimentkit eval GOLD.jsonl [--backend B] [--json]` | Kennzahlen, Tag-Slices, alt-test, Fehlerliste |
-| `sentimentkit backends` | Backends und ihre Roadmap-Stufe auflisten |
+| `sentimentkit eval GOLD.jsonl --compare B1,B2[,…] [--json]` | Jedes Backend auf demselben Gold-Set, nebeneinander, dazu `eval.beats_baseline()` gegen B1 |
+| `sentimentkit backends` | Backends auflisten: verfügbar, Extra fehlt oder Roadmap-Stufe |
 | `sentimentkit policy-check [--policy DATEI]` | Policy laden und Hash ausgeben |
 | `sentimentkit validate judgements.jsonl` | Atome gegen das JSON-Schema prüfen |
 
@@ -106,6 +152,7 @@ Exit-Codes: `0` ok · `1` Fehler · `2` Policy-Verstoss.
 | `fixtures/aspects_schule.yaml` | Beispiel-Typed-Questions für Schul-/Elternfeedback |
 | `fixtures/keywords_schule.yaml` | Filter für den Schulbezug der Stufe-1-Kandidaten; dient zugleich als `aspect_terms` des Gold-Sets |
 | `schema/*.schema.json` | Schemas für Urteil, Lauf und Gold-Set (Draft 2020-12) |
+| `SENTIMENTKIT_ENCODER_*` | Modell, Revision, Gerät und Batch-Grösse des Encoder-Backends (siehe oben) |
 
 Eingabeformate: CSV/TSV (Spalte `text`), JSONL/JSON (`{"text": …}`), Markdown/TXT (ein Eintrag je Absatz).
 
@@ -117,7 +164,7 @@ sentimentkit/
 │   ├── models.py          # TextItem, Judgement (Evidenz-Atom), RunMeta
 │   ├── policy.py          # Policy, PolicyViolation, Prüfungen
 │   ├── preprocess.py      # Satzsplit, Tokens, Sprachschätzung, Decompound
-│   ├── backends/          # base.py (Interface), lexicon.py, Registry
+│   ├── backends/          # base.py (Interface), lexicon.py, encoder.py, Registry
 │   ├── eval/              # metrics.py, alt_test.py, Gold-Set-Loader, Gates
 │   ├── pipeline.py        # Policy → Backend → Atome → Gate
 │   ├── gate.py            # Routing in die menschliche Prüfung

@@ -12,6 +12,7 @@ softmax and lexicon scores comparable, and it keeps an escape option
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 
 from ..models import Polarity
@@ -36,6 +37,14 @@ class Decision:
     distribution: dict[str, float] = field(default_factory=dict)
     evidence: list[str] = field(default_factory=list)
     prompt_hash: str | None = None
+
+
+# (text, aspect, aspect_terms, lang) — one typed question
+Query = tuple[str, str, tuple[str, ...], str | None]
+
+
+class BackendUnavailable(RuntimeError):
+    """The backend exists but cannot run here, e.g. its optional extra is missing."""
 
 
 class Backend(ABC):
@@ -66,6 +75,34 @@ class Backend(ABC):
     ) -> list[Decision]:
         """Batch hook. Backends with real batching override this."""
         return [self.decide(t, aspect=aspect, aspect_terms=aspect_terms, lang=lang) for t in texts]
+
+    def missing_extra(self) -> str | None:
+        """The pip extra this backend still needs in this environment, or None.
+        Must stay cheap — `sentimentkit backends` calls it for every backend."""
+        return None
+
+
+def not_mentioned(aspect: str) -> Decision:
+    """The escape answer when no clause mentions the aspect."""
+    dist = {o.value: 0.0 for o in ASPECT_OPTIONS}
+    dist[Polarity.NOT_MENTIONED.value] = 1.0
+    return Decision(Polarity.NOT_MENTIONED, 0.0, 0.9, dist, [f"aspect:{aspect}:absent"])
+
+
+def decide_grouped(backend: Backend, queries: Sequence[Query]) -> list[Decision]:
+    """Answer mixed queries in input order with one `decide_many` call per
+    (aspect, aspect_terms, lang), so that batching backends actually batch."""
+    groups: dict[tuple[str, tuple[str, ...], str | None], list[int]] = {}
+    for i, (_, aspect, terms, lang) in enumerate(queries):
+        groups.setdefault((aspect, tuple(terms), lang), []).append(i)
+    answers: dict[int, Decision] = {}
+    for (aspect, terms, lang), idxs in groups.items():
+        texts = [queries[i][0] for i in idxs]
+        decisions = backend.decide_many(texts, aspect=aspect, aspect_terms=terms, lang=lang)
+        if len(decisions) != len(idxs):
+            raise RuntimeError(f"backend {backend.name!r} answered {len(decisions)} of {len(idxs)}")
+        answers.update(zip(idxs, decisions))
+    return [answers[i] for i in range(len(queries))]
 
 
 class NotAvailable(Backend):

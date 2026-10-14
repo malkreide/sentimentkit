@@ -25,6 +25,7 @@ _FALSE_SPLIT = re.compile(
 # genuine sentence end.
 _FALSE_SPLIT_BEFORE_NUMBER = re.compile(r"\b(?:art|abs|nr|ziff)\.$", re.IGNORECASE)
 _TOKEN = re.compile(r"[A-Za-zÄÖÜäöüßÀ-ÿ']+|[!?]", re.UNICODE)
+_CLAUSE_SPLIT = re.compile(r"[,;:]")
 
 STOPWORDS = {
     "de": {"und", "der", "die", "das", "nicht", "ist", "mit", "ein", "eine", "wir", "sich", "auch"},
@@ -90,6 +91,20 @@ def _is_false_split(piece: str, following: str) -> bool:
         _FALSE_SPLIT.search(piece)
         or (_FALSE_SPLIT_BEFORE_NUMBER.search(piece) and following[:1].isdigit())
     )
+
+
+def aspect_clauses(text: str, terms: Iterable[str]) -> list[str]:
+    """Clauses of `text` that mention one of `terms` (case-insensitive substring).
+
+    Clause-level scoping for one typed question per aspect: in "Der Unterricht
+    ist gut, der Mittagstisch dagegen ein Chaos" only the second clause answers
+    for 'mensa'. Every backend scopes through this function, so all of them
+    are judged on the same unit. An empty list means the aspect is absent.
+    """
+    needles = tuple(t.lower() for t in terms)
+    units = [s.text for s in split_sentences(text)] or [text]
+    clauses = [c.strip() for u in units for c in _CLAUSE_SPLIT.split(u) if c.strip()]
+    return [c for c in clauses if any(t in c.lower() for t in needles)]
 
 
 def tokenize(text: str) -> list[str]:

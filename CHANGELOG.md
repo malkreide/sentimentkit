@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Encoder backend `backends/encoder.py` (stage 2a): fine-tuned transformer classifier, local, CPU by default. Default model `oliverguhr/german-sentiment-bert`, alternative `cardiffnlp/twitter-xlm-roberta-base-sentiment` for French and Italian; model, revision, device and batch size via `SENTIMENTKIT_ENCODER_*` or constructor arguments. Softmax as `distribution`, top probability as `confidence`, P(positive) − P(negative) as `intensity`; `model_version` is `<model>@<commit>`, both presets pinned to a commit, branches and tags resolved to the loaded commit. Real batch inference in `decide_many` (length-sorted batches), per-preset input cleaning as in training, clause scoping and `not_mentioned` as in the lexicon backend, evidence flags `DIALECT?`, `LANG?:<lang>`, `TRUNCATED?`. `transformers`/`torch` are imported only on first use; a missing extra ends with exit code 1 and the install command. transformers' background safetensors conversion is switched off (it would contact the Hub and download from an open pull request)
+- `sentimentkit eval GOLD --compare lexicon,encoder`: several backends on the same gold set, metrics and tag slices side by side, and `eval.beats_baseline()` against the first one; `--json` for the full results
+- `backends.base.decide_grouped()`: answers mixed questions with one `decide_many` call per aspect and language, used by `eval` and `analyze`
+- Tests for the encoder backend with a mocked tokenizer and model (no download, no torch in CI) and for `--compare`; README section on the encoder backend with fixture figures and caveats (EN/DE)
 - `scripts/build_gold_candidates.py`: stage-1 annotation template from public source documents (JSONL with id, source, date, title, text) — sentence split via `preprocess.split_sentences` with repair of German false splits ("3. März", "12 Mio. Franken"), school-reference filter from `fixtures/keywords_schule.yaml` (keywords and exclude list), 5–60 tokens, exact and near-duplicate removal (token-set Jaccard), seeded round-robin sampling across sources (`--target`), unconfirmed rule-based tag hints (`negation?`, `dialect?`), policy check on person-level fields (exit 2), UTF-8 with BOM for Excel, no overwrite of an annotated template without `--force`
 - `scripts/candidates_to_gold.py`: merges independently annotated CSV copies by `text_id` into the gold-set JSONL — majority label or `unclear` on dissent (optional `a3` adjudicates), `dissent` tag, label aliases, aspect `schule` with the keyword list as `aspect_terms`, schema validation, Cohen's kappa a1 vs. a2 and the stage-1 tag slices
 - `docs/ANNOTATION.md`: annotation guide — labels with one example each, rules for irony, dialect, mixed sentences and negation, tag vocabulary, privacy, Excel workflow, kappa target ≥ 0.7, rights question for media text
@@ -15,6 +19,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Tests for both scripts; README section on the stage-1 workflow (EN/DE)
 
 ### Changed
+- Registry: `encoder` is a real backend instead of the `NotAvailable` placeholder; `sentimentkit backends` shows `available`, `needs [encoder]` or the roadmap stage
+- Optional extra `encoder`: `torch>=2.6` (transformers loads pickled weights only from 2.6 on, CVE-2025-32434), plus `sentencepiece` and `protobuf` for the XLM-R tokenizer
+- Aspect scoping moved to `preprocess.aspect_clauses()` and the `not_mentioned` answer to `backends.base.not_mentioned()`, shared by all backends; the lexicon eval figures are unchanged
+- `eval` and `analyze` batch their questions per aspect; unknown backends end with a one-line error instead of a traceback
 - `schema/gold.schema.json`: optional `source` field, so every gold instance keeps its provenance
 
 ### Fixed
