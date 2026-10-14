@@ -10,8 +10,8 @@ fields by a human. Lines starting with ``#`` are comments.
 
 Rules only, no model and no network:
 
-1. split each text with ``preprocess.split_sentences`` and re-join the false
-   splits German news text produces ("am 3. März", "12 Mio. Franken", "z. B.");
+1. split each text with ``preprocess.split_sentences``, which keeps German
+   ordinals and abbreviations inside a sentence ("am 3. März", "12 Mio. Franken");
 2. keep sentences with 5..60 word tokens (``preprocess.tokenize``; numbers do
    not count);
 3. keep sentences with a school reference (``fixtures/keywords_schule.yaml``);
@@ -64,16 +64,6 @@ COLUMNS = ["text_id", "text", "source", "a1", "a2", "tags", "note"]
 REQUIRED_FIELDS = ("id", "source", "text")
 STAGE1_RANGE = (300, 500)
 
-# A piece ending like this was cut by split_sentences in the middle of a
-# sentence: a day or class ordinal ("3. März") or a common abbreviation
-# followed by a capitalised word ("12 Mio. Franken", "z. B. Die", "St. Gallen").
-_FALSE_SPLIT = re.compile(
-    r"(?:(?<!\d)\d{1,2}|\b(?:z|bzw|ca|dr|prof|st|vgl|evtl|inkl|sog|resp|mio|mrd|jh))\.$",
-    re.IGNORECASE,
-)
-# Only cut when a number follows ("Art. 5 URG"): "Projekte dieser Art." is a
-# genuine sentence end.
-_FALSE_SPLIT_BEFORE_NUMBER = re.compile(r"\b(?:art|abs|nr|ziff)\.$", re.IGNORECASE)
 _WS = re.compile(r"\s+")
 
 
@@ -154,19 +144,6 @@ def check_policy(docs: Sequence[dict], policy_path: str | Path | None = None) ->
 
 
 # --- rules -------------------------------------------------------------------
-def repair_splits(pieces: Iterable[str]) -> list[str]:
-    out: list[str] = []
-    for piece in pieces:
-        if out and (
-            _FALSE_SPLIT.search(out[-1])
-            or (_FALSE_SPLIT_BEFORE_NUMBER.search(out[-1]) and piece[:1].isdigit())
-        ):
-            out[-1] = f"{out[-1]} {piece}"
-        else:
-            out.append(piece)
-    return out
-
-
 def word_tokens(text: str) -> list[str]:
     return [t for t in tokenize(text) if t not in {"!", "?"}]
 
@@ -218,9 +195,8 @@ def extract_candidates(
         title = _WS.sub(" ", str(doc.get("title") or "")).strip()
         if include_titles and title:
             units.append((f"{doc_id}-t", title, ["headline"]))
-        pieces = repair_splits(s.text for s in split_sentences(str(doc["text"])))
-        for i, piece in enumerate(pieces, 1):
-            units.append((f"{doc_id}-s{i:03d}", _WS.sub(" ", piece).strip(), []))
+        for i, sent in enumerate(split_sentences(str(doc["text"])), 1):
+            units.append((f"{doc_id}-s{i:03d}", _WS.sub(" ", sent.text).strip(), []))
         for text_id, text, base_tags in units:
             stats.sentences += 1
             toks = word_tokens(text)

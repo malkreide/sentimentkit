@@ -25,33 +25,6 @@ def _rows(path: Path, delimiter: str = ",") -> list[dict[str, str]]:
         return list(csv.DictReader(fh, delimiter=delimiter))
 
 
-def test_repair_splits_rejoins_ordinals_and_abbreviations(build_candidates):
-    pieces = [
-        "Am 3.",
-        "März tagt die Kreisschulbehörde.",
-        "Der Rat sprach 12 Mio.",
-        "Franken für die Schule.",
-        "Das gilt z.",
-        "B. für den Hort.",
-        "Die Tagesschule startet im August 2026.",
-        "Danach folgt die nächste.",
-        "Gemäss Art.",
-        "5 gilt das für jede Schule.",
-        "Wir brauchen Projekte dieser Art.",
-        "Die Schule profitiert.",
-    ]
-    assert build_candidates.repair_splits(pieces) == [
-        "Am 3. März tagt die Kreisschulbehörde.",
-        "Der Rat sprach 12 Mio. Franken für die Schule.",
-        "Das gilt z. B. für den Hort.",
-        "Die Tagesschule startet im August 2026.",  # a year ends a sentence
-        "Danach folgt die nächste.",
-        "Gemäss Art. 5 gilt das für jede Schule.",
-        "Wir brauchen Projekte dieser Art.",  # a noun ends a sentence
-        "Die Schule profitiert.",
-    ]
-
-
 @pytest.mark.parametrize(
     ("tokens", "expected"),
     [
