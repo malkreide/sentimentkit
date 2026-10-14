@@ -144,6 +144,7 @@ def softmax(logits: Sequence[float]) -> list[float]:
 class EncoderBackend(Backend):
     name = "encoder"
     stage = 2
+    softmax_distribution = True
 
     def __init__(
         self,

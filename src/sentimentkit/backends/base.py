@@ -50,6 +50,9 @@ class BackendUnavailable(RuntimeError):
 class Backend(ABC):
     name: str = "abstract"
     stage: int = 0  # roadmap stage in which the backend becomes usable
+    # True when `distribution` is a softmax and the polarity its argmax:
+    # then `sentimentkit eval` can fit a temperature to it.
+    softmax_distribution: bool = False
 
     @property
     @abstractmethod

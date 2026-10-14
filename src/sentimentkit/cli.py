@@ -190,6 +190,7 @@ def _print_result(res: EvalResult, as_json: bool) -> None:
         f"accuracy {res.accuracy:.3f} · macro-F1 {res.macro_f1:.3f} · "
         f"kappa {res.kappa_vs_gold:.3f} · ECE {res.ece:.3f}"
     )
+    click.echo(_calibration_line(res))
     for tag, row in res.by_tag.items():
         click.echo(f"  {tag:14} n={row['n']:<3} acc={row['accuracy']:.2f}")
     if res.alt_test:
@@ -200,6 +201,17 @@ def _print_result(res: EvalResult, as_json: bool) -> None:
         )
     if res.failures:
         click.echo(f"failures: {len(res.failures)} (use --json for details)")
+
+
+def _calibration_line(res: EvalResult) -> str:
+    c = res.calibration
+    if c is None:
+        return "calibration: n/a — temperature scaling needs a softmax distribution"
+    return (
+        f"calibration: ECE {c['ece_before']:.3f} → {c['ece_after']:.3f} after temperature "
+        f"scaling (T={c['temperature']:g}, {c['folds']}-fold cross-fitted, "
+        f"{c['n_scaled']} of {res.n} judgements rescaled)"
+    )
 
 
 def _print_comparison(gold_path: str, results: list[EvalResult], as_json: bool) -> None:
@@ -217,7 +229,8 @@ def _print_comparison(gold_path: str, results: list[EvalResult], as_json: bool) 
         return
     click.echo(f"gold {gold_path} · n={baseline.n} · baseline {baseline.backend}")
     click.echo(
-        f"{'backend':10} {'acc':>6} {'macro-F1':>8} {'kappa':>6} {'ECE':>6}  alt-test  model"
+        f"{'backend':10} {'acc':>6} {'macro-F1':>8} {'kappa':>6} {'ECE':>6} {'ECE-TS':>6}"
+        "  alt-test  model"
     )
     for r in results:
         alt = (
@@ -225,9 +238,10 @@ def _print_comparison(gold_path: str, results: list[EvalResult], as_json: bool) 
             if r.alt_test
             else "—"
         )
+        ece_ts = f"{r.calibration['ece_after']:6.3f}" if r.calibration else f"{'—':>6}"
         click.echo(
             f"{r.backend:10} {r.accuracy:6.3f} {r.macro_f1:8.3f} {r.kappa_vs_gold:6.3f} "
-            f"{r.ece:6.3f}  {alt:8}  {r.model_version}"
+            f"{r.ece:6.3f} {ece_ts}  {alt:8}  {r.model_version}"
         )
     if baseline.by_tag:
         click.echo("tag slices (accuracy):")
@@ -235,6 +249,9 @@ def _print_comparison(gold_path: str, results: list[EvalResult], as_json: bool) 
         for tag, row in baseline.by_tag.items():
             accs = "  ".join(f"{r.by_tag[tag]['accuracy']:8.2f}" for r in results)
             click.echo(f"  {tag:14} {row['n']:>3}  {accs}")
+    for r in results:
+        if r.calibration:
+            click.echo(f"{r.backend}: {_calibration_line(r)}")
     for c in candidates:
         gain = c.macro_f1 - baseline.macro_f1
         click.echo(
