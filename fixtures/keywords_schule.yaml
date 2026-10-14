@@ -1,0 +1,34 @@
+# School-reference filter for scripts/build_gold_candidates.py (stage 1).
+#
+# A sentence becomes a gold-set candidate when at least one of its tokens
+# contains a keyword (lower-case substring match, so compounds and plurals are
+# covered: "Volksschulen", "Schulkreise", "Lehrpersonen", "Tagesschulangebot").
+# This is the same rule the lexicon backend uses to scope an aspect, so the
+# list can double as `aspect_terms` in the gold set (scripts/candidates_to_gold.py).
+keywords:
+  - schule
+  - schulamt
+  - schulkreis
+  - lehrperson
+  - kindergarten
+  - kindergärten       # umlaut plural, not covered by the substring rule
+  - volksschule
+  - betreuung
+  - kreisschulbehörde
+  - tagesschule
+
+# A token that contains one of these terms never counts as a hit, even if it
+# also contains a keyword: "Hochschule" is not the Volksschule. Other tokens of
+# the same sentence can still match.
+exclude:
+  - hochschule
+  - fahrschule
+  - skischule
+  - tanzschule
+  - sprachschule
+  - hundeschule
+
+# Not active — candidates for a deliberate extension. None of them contains a
+# keyword above, so sentences that use only these words are missed today:
+#   schulhaus, schulleitung, schulweg, schulraum, schulpflege, schüler,
+#   lehrer, lehrerin, hort, mittagstisch

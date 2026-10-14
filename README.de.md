@@ -68,6 +68,23 @@ Baseline auf dem Fixture-Set der Stufe 0 (30 synthetische deutsche Sätze, zwei 
 
 Diese Zahlen beschreiben ein Fixture, keine Domäne. Stufe 1 ersetzt das Fixture durch ein reales, öffentliches Gold-Set.
 
+## Stufe 1: Gold-Set aufbauen
+
+Stufe 1 ersetzt das Fixture durch 300–500 reale Sätze aus öffentlichen Quellen, die je zwei Personen beurteilen. Beide Skripte arbeiten nur mit Regeln — kein Modell, kein Netzwerk.
+
+1. **Quellen sammeln** als JSONL, ein Dokument pro Zeile mit `id`, `source`, `date`, `title`, `text`: Medienartikel über news-monitor-mcp, Gemeinderats-Voten über zurich-opendata-mcp. Personenfelder (`author`, `name` …) vorher entfernen, sonst bricht die Policy mit Exit 2 ab. Synthetisches Beispiel: `fixtures/sources_synthetic.jsonl`.
+2. **Annotationsvorlage erzeugen.** Sätze werden getrennt (mit Reparatur deutscher Fehltrennungen wie «3. März» oder «12 Mio. Franken»), nur mit Schulbezug (`fixtures/keywords_schule.yaml`) und 5–60 Tokens behalten, von Dubletten und Beinahe-Dubletten bereinigt, reihum über die Quellen ausgewählt und gemischt.
+   ```bash
+   python scripts/build_gold_candidates.py quellen.jsonl --target 400
+   ```
+   Ergebnis: `fixtures/gold_v1_candidates.csv` mit `text_id, text, source, a1, a2, tags, note`. Regelbasierte Vorschläge wie `negation?` gelten erst, wenn eine annotierende Person das `?` entfernt.
+3. **Annotieren** nach [docs/ANNOTATION.md](docs/ANNOTATION.md) — jede Person in einer eigenen Kopie, nur in der eigenen Spalte.
+4. **Zum Gold-Set zusammenführen.** Die Kopien werden über `text_id` vereint; `gold` ist das Mehrheitslabel, bei Dissens `unclear` (eine optionale dritte Spalte `a3` schlichtet). Jede Zeile wird gegen `schema/gold.schema.json` geprüft; das Skript gibt Cohen's κ (Ziel ≥ 0.7) und die Tag-Slices des Stufe-1-Gates aus.
+   ```bash
+   python scripts/candidates_to_gold.py gold_v1_a1.csv gold_v1_a2.csv -o fixtures/gold_v1.jsonl
+   ```
+5. **Baseline messen:** `sentimentkit eval fixtures/gold_v1.jsonl --backend lexicon`
+
 ## Verfügbare Tools
 
 | Befehl | Beschreibung |
@@ -87,6 +104,7 @@ Exit-Codes: `0` ok · `1` Fehler · `2` Policy-Verstoss.
 | `policy.yaml` | Governance-Regeln; wird in jeden Lauf gehasht |
 | `lexicon/de_seed.tsv`, `lexicon/de_modifiers.yaml` | Baseline-Lexikon (eigene Arbeit, MIT) und deutsche Regeln |
 | `fixtures/aspects_schule.yaml` | Beispiel-Typed-Questions für Schul-/Elternfeedback |
+| `fixtures/keywords_schule.yaml` | Filter für den Schulbezug der Stufe-1-Kandidaten; dient zugleich als `aspect_terms` des Gold-Sets |
 | `schema/*.schema.json` | Schemas für Urteil, Lauf und Gold-Set (Draft 2020-12) |
 
 Eingabeformate: CSV/TSV (Spalte `text`), JSONL/JSON (`{"text": …}`), Markdown/TXT (ein Eintrag je Absatz).
@@ -108,9 +126,10 @@ sentimentkit/
 │   └── cli.py
 ├── schema/                # JSON-Schemas
 ├── lexicon/               # Seed-Lexikon und Modifikatoren (Deutsch)
-├── fixtures/              # synthetisches Gold-Set, Befragungs-CSV, Aspekte-Beispiel
+├── fixtures/              # synthetisches Gold-Set, Befragungs-CSV, Quelldokumente, Aspekte und Schlagwörter
+├── scripts/               # build_gold_candidates.py, candidates_to_gold.py, validate_repo.py
 ├── skills/sentiment-scan/ # Claude-Skill
-├── docs/                  # ROADMAP.md, ARCHITECTURE.md
+├── docs/                  # ROADMAP.md, ARCHITECTURE.md, ANNOTATION.md
 ├── tests/
 └── policy.yaml
 ```

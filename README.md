@@ -68,6 +68,23 @@ Baseline on the stage-0 fixture set (30 synthetic German sentences, two syntheti
 
 These numbers describe a fixture, not a domain. Stage 1 replaces the fixture with a real, public gold set.
 
+## Stage 1: Building the Gold Set
+
+Stage 1 replaces the fixture with 300–500 real sentences from public sources, each labelled by two people. Both scripts are rules only — no model, no network.
+
+1. **Collect sources** as JSONL, one document per line with `id`, `source`, `date`, `title`, `text`: media articles via news-monitor-mcp, council speeches via zurich-opendata-mcp. Person fields (`author`, `name`, …) must be removed first; otherwise the policy aborts with exit code 2. A synthetic example: `fixtures/sources_synthetic.jsonl`.
+2. **Build the annotation template.** Sentences are split (with repair of German false splits such as "3. März" or "12 Mio. Franken"), kept only with a school reference (`fixtures/keywords_schule.yaml`) and 5–60 tokens, de-duplicated (exact and near-duplicate), then sampled round-robin across sources and shuffled.
+   ```bash
+   python scripts/build_gold_candidates.py sources.jsonl --target 400
+   ```
+   Output: `fixtures/gold_v1_candidates.csv` with `text_id, text, source, a1, a2, tags, note`. Rule-based hints such as `negation?` stay unconfirmed until an annotator removes the `?`.
+3. **Annotate** following [docs/ANNOTATION.md](docs/ANNOTATION.md) — each person in an own copy, only their own column.
+4. **Merge into the gold set.** Copies are merged by `text_id`; `gold` is the majority label, `unclear` on dissent (an optional third column `a3` adjudicates). Every line is validated against `schema/gold.schema.json`; the script prints Cohen's κ (target ≥ 0.7) and the tag slices the stage-1 gate counts.
+   ```bash
+   python scripts/candidates_to_gold.py gold_v1_a1.csv gold_v1_a2.csv -o fixtures/gold_v1.jsonl
+   ```
+5. **Measure the baseline:** `sentimentkit eval fixtures/gold_v1.jsonl --backend lexicon`
+
 ## Available Tools
 
 | Command | Description |
@@ -87,6 +104,7 @@ Exit codes: `0` ok · `1` error · `2` policy violation.
 | `policy.yaml` | Governance rules; hashed into every run |
 | `lexicon/de_seed.tsv`, `lexicon/de_modifiers.yaml` | Baseline lexicon (own work, MIT) and German rules |
 | `fixtures/aspects_schule.yaml` | Example typed questions for school/parent feedback |
+| `fixtures/keywords_schule.yaml` | School-reference filter for stage-1 candidates; doubles as `aspect_terms` of the gold set |
 | `schema/*.schema.json` | Judgement, run and gold-set schemas (draft 2020-12) |
 
 Input formats: CSV/TSV (column `text`), JSONL/JSON (`{"text": …}`), Markdown/TXT (one item per paragraph).
@@ -108,9 +126,10 @@ sentimentkit/
 │   └── cli.py
 ├── schema/                # JSON schemas
 ├── lexicon/               # seed lexicon and modifiers (German)
-├── fixtures/              # synthetic gold set, survey CSV, aspects example
+├── fixtures/              # synthetic gold set, survey CSV, source documents, aspects and keywords
+├── scripts/               # build_gold_candidates.py, candidates_to_gold.py, validate_repo.py
 ├── skills/sentiment-scan/ # Claude skill
-├── docs/                  # ROADMAP.md, ARCHITECTURE.md
+├── docs/                  # ROADMAP.md, ARCHITECTURE.md, ANNOTATION.md
 ├── tests/
 └── policy.yaml
 ```

@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `scripts/build_gold_candidates.py`: stage-1 annotation template from public source documents (JSONL with id, source, date, title, text) — sentence split via `preprocess.split_sentences` with repair of German false splits ("3. März", "12 Mio. Franken"), school-reference filter from `fixtures/keywords_schule.yaml` (keywords and exclude list), 5–60 tokens, exact and near-duplicate removal (token-set Jaccard), seeded round-robin sampling across sources (`--target`), unconfirmed rule-based tag hints (`negation?`, `dialect?`), policy check on person-level fields (exit 2), UTF-8 with BOM for Excel, no overwrite of an annotated template without `--force`
+- `scripts/candidates_to_gold.py`: merges independently annotated CSV copies by `text_id` into the gold-set JSONL — majority label or `unclear` on dissent (optional `a3` adjudicates), `dissent` tag, label aliases, aspect `schule` with the keyword list as `aspect_terms`, schema validation, Cohen's kappa a1 vs. a2 and the stage-1 tag slices
+- `docs/ANNOTATION.md`: annotation guide — labels with one example each, rules for irony, dialect, mixed sentences and negation, tag vocabulary, privacy, Excel workflow, kappa target ≥ 0.7, rights question for media text
+- `fixtures/sources_synthetic.jsonl` (5 synthetic source documents) and `fixtures/keywords_schule.yaml`
+- Tests for both scripts; README section on the stage-1 workflow (EN/DE)
+
+### Changed
+- `schema/gold.schema.json`: optional `source` field, so every gold instance keeps its provenance
+
 ## [0.1.0] - 2026-10-14
 
 ### Added
