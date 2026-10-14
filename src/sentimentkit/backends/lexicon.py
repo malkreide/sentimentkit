@@ -18,13 +18,12 @@ from pathlib import Path
 import yaml
 
 from ..models import Polarity
-from ..preprocess import decompound, guess_language, split_sentences
-from .base import ASPECT_OPTIONS, DEFAULT_OPTIONS, Backend, Decision
+from ..preprocess import aspect_clauses, decompound, guess_language, split_sentences
+from .base import ASPECT_OPTIONS, DEFAULT_OPTIONS, Backend, Decision, not_mentioned
 
 LEXICON_DIR = Path(__file__).resolve().parents[3] / "lexicon"
 _TOK = re.compile(r"[A-Za-zÄÖÜäöüßÀ-ÿ']+|[,;:.!?]", re.UNICODE)
 _CLAUSE_END = {",", ";", ":", ".", "!", "?"}
-_CLAUSE_SPLIT = re.compile(r"[,;:]")
 
 POLAR_THRESHOLD = 0.15
 
@@ -162,17 +161,11 @@ class LexiconBackend(Backend):
         aspect_terms: tuple[str, ...] = (),
         lang: str | None = None,
     ) -> Decision:
-        sentences = split_sentences(text) or []
-        units = [s.text for s in sentences] or [text]
+        units = [s.text for s in split_sentences(text)] or [text]
         if aspect != "overall" and aspect_terms:
-            terms = tuple(t.lower() for t in aspect_terms)
-            # clause-level scoping: "Der Unterricht ist gut, der Mittagstisch ein Chaos"
-            clauses = [c.strip() for u in units for c in _CLAUSE_SPLIT.split(u) if c.strip()]
-            units = [c for c in clauses if any(t in c.lower() for t in terms)]
+            units = aspect_clauses(text, aspect_terms)
             if not units:
-                dist = {o.value: 0.0 for o in ASPECT_OPTIONS}
-                dist[Polarity.NOT_MENTIONED.value] = 1.0
-                return Decision(Polarity.NOT_MENTIONED, 0.0, 0.9, dist, [f"aspect:{aspect}:absent"])
+                return not_mentioned(aspect)
 
         total = 0.0
         hits = 0

@@ -32,7 +32,9 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]
-encoder = ["transformers>=4.40", "torch"]
+# torch>=2.6: transformers refuses pickled weights (pytorch_model.bin) below it, CVE-2025-32434.
+# sentencepiece + protobuf: the XLM-R tokenizer ships only as a SentencePiece model.
+encoder = ["transformers>=4.40", "torch>=2.6", "sentencepiece", "protobuf"]
 llm = ["httpx>=0.27"]
 
 [project.scripts]

@@ -108,7 +108,7 @@ def test_cli_unavailable_backend(tmp_path):
             "--purpose",
             "media_resonance",
             "--backend",
-            "encoder",
+            "llm-score",
             "-o",
             str(tmp_path / "o"),
         ],

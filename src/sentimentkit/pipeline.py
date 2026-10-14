@@ -11,7 +11,7 @@ from dataclasses import dataclass
 
 from . import __version__
 from .backends import get_backend
-from .backends.base import Backend
+from .backends.base import Backend, decide_grouped
 from .gate import apply_gate
 from .models import Judgement, RunMeta, TextItem
 from .policy import Policy
@@ -59,29 +59,30 @@ def run(
         params={"aspects": sorted(aspects) if aspects else []},
     )
 
+    targets: list[tuple[str, tuple[str, ...]]] = [("overall", ())]
+    if aspects:
+        targets += [(name, tuple(terms)) for name, terms in aspects.items()]
+    pairs = [(item, aspect, terms) for item in items for aspect, terms in targets]
+    decisions = decide_grouped(backend_obj, [(it.text, a, t, it.lang) for it, a, t in pairs])
+
     judgements: list[Judgement] = []
-    for item in items:
-        targets: list[tuple[str, tuple[str, ...]]] = [("overall", ())]
-        if aspects:
-            targets += [(name, tuple(terms)) for name, terms in aspects.items()]
-        for aspect, terms in targets:
-            d = backend_obj.decide(item.text, aspect=aspect, aspect_terms=terms, lang=item.lang)
-            j = Judgement(
-                run_id=meta.run_id,
-                text_id=item.text_id,
-                span=(0, len(item.text)),
-                sentence=item.text if len(item.text) <= 280 else item.text[:277] + "…",
-                aspect=aspect,
-                polarity=d.polarity,
-                intensity=d.intensity,
-                confidence=d.confidence,
-                distribution=d.distribution or None,
-                backend=backend_obj.name,
-                model_version=backend_obj.model_version,
-                prompt_hash=d.prompt_hash,
-                evidence=d.evidence,
-            )
-            judgements.append(apply_gate(j, policy))
+    for (item, aspect, _), d in zip(pairs, decisions):
+        j = Judgement(
+            run_id=meta.run_id,
+            text_id=item.text_id,
+            span=(0, len(item.text)),
+            sentence=item.text if len(item.text) <= 280 else item.text[:277] + "…",
+            aspect=aspect,
+            polarity=d.polarity,
+            intensity=d.intensity,
+            confidence=d.confidence,
+            distribution=d.distribution or None,
+            backend=backend_obj.name,
+            model_version=backend_obj.model_version,
+            prompt_hash=d.prompt_hash,
+            evidence=d.evidence,
+        )
+        judgements.append(apply_gate(j, policy))
 
     meta.n_judgements = len(judgements)
     meta.n_review = sum(1 for j in judgements if j.needs_review)

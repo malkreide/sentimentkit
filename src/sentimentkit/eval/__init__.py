@@ -19,7 +19,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
-from ..backends.base import Backend
+from ..backends.base import Backend, decide_grouped
 from ..models import Polarity
 from .alt_test import AltTestResult, alt_test
 from .metrics import accuracy, cohen_kappa, confusion, expected_calibration_error, macro_f1
@@ -83,8 +83,8 @@ def evaluate(
     preds: list[str] = []
     confs: list[float] = []
     failures: list[dict[str, Any]] = []
-    for g in gold:
-        d = backend.decide(g.text, aspect=g.aspect, aspect_terms=g.aspect_terms, lang=g.lang)
+    decisions = decide_grouped(backend, [(g.text, g.aspect, g.aspect_terms, g.lang) for g in gold])
+    for g, d in zip(gold, decisions):
         preds.append(d.polarity.value)
         confs.append(d.confidence)
         if d.polarity.value != g.gold:
@@ -133,7 +133,12 @@ def evaluate(
     )
 
 
-def beats_baseline(candidate: EvalResult, baseline: EvalResult, *, min_gain: float = 0.05) -> bool:
+MIN_GAIN = 0.05  # macro-F1 points a backend must add over the baseline (ROADMAP stage 2)
+
+
+def beats_baseline(
+    candidate: EvalResult, baseline: EvalResult, *, min_gain: float = MIN_GAIN
+) -> bool:
     """Roadmap gate for stage 2: a backend becomes default only when its
     macro-F1 exceeds the lexicon baseline by `min_gain` on the same gold set."""
     return candidate.n == baseline.n and candidate.macro_f1 >= baseline.macro_f1 + min_gain
@@ -145,6 +150,7 @@ __all__ = [
     "load_gold",
     "evaluate",
     "beats_baseline",
+    "MIN_GAIN",
     "alt_test",
     "accuracy",
     "macro_f1",

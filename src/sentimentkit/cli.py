@@ -2,7 +2,7 @@
 
     sentimentkit backends
     sentimentkit analyze INPUT --purpose media_resonance [--backend lexicon] [--aspects aspects.yaml] -o out/
-    sentimentkit eval GOLD.jsonl [--backend lexicon] [--json]
+    sentimentkit eval GOLD.jsonl [--backend lexicon | --compare lexicon,encoder] [--json]
     sentimentkit policy-check [--policy policy.yaml]
     sentimentkit validate judgements.jsonl
 
@@ -14,13 +14,15 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
+from typing import NoReturn
 
 import click
 import yaml
+from click.core import ParameterSource
 
 from . import __version__
-from .backends import available, get_backend
-from .eval import evaluate, load_gold
+from .backends import Backend, BackendUnavailable, NotAvailable, available, get_backend
+from .eval import MIN_GAIN, EvalResult, beats_baseline, evaluate, load_gold
 from .io import read_items, write_judgements, write_review_queue, write_run_meta
 from .models import Judgement
 from .pipeline import run as run_pipeline
@@ -28,6 +30,18 @@ from .policy import PolicyViolation, load_policy
 from .report import markdown_report
 
 EXIT_POLICY = 2
+
+
+def _fail(message: str) -> NoReturn:
+    click.echo(f"ERROR: {message}", err=True)
+    sys.exit(1)
+
+
+def _backend(name: str) -> Backend:
+    try:
+        return get_backend(name)
+    except (KeyError, NotImplementedError) as exc:
+        _fail(str(exc.args[0]))
 
 
 @click.group()
@@ -38,11 +52,15 @@ def main() -> None:
 
 @main.command()
 def backends() -> None:
-    """List backends and the roadmap stage in which they become usable."""
+    """List backends: available, missing an optional extra, or scheduled for a later stage."""
     for name, b in available().items():
-        state = "available" if b.stage == 0 else f"stage {b.stage}"
+        if isinstance(b, NotAvailable):
+            state = f"stage {b.stage}"
+        else:
+            missing = b.missing_extra()
+            state = f"needs [{missing}]" if missing else "available"
         note = getattr(b, "note", "")
-        click.echo(f"{name:10} {state:12} {note}")
+        click.echo(f"{name:10} {state:16} {note}".rstrip())
 
 
 @main.command("policy-check")
@@ -93,7 +111,7 @@ def analyze(
         aspects = {str(k): tuple(str(t) for t in v) for k, v in raw.items()}
     try:
         items = read_items(input_path, text_column=text_column)
-        backend = get_backend(backend_name)
+        backend = _backend(backend_name)
         result = run_pipeline(
             items,
             policy=pol,
@@ -106,9 +124,8 @@ def analyze(
     except PolicyViolation as exc:
         click.echo(f"POLICY VIOLATION: {exc}", err=True)
         sys.exit(EXIT_POLICY)
-    except NotImplementedError as exc:
-        click.echo(f"ERROR: {exc}", err=True)
-        sys.exit(1)
+    except BackendUnavailable as exc:
+        _fail(str(exc))
 
     out = Path(out_dir)
     write_judgements(out / "judgements.jsonl", result.judgements)
@@ -126,17 +143,45 @@ def analyze(
 @main.command("eval")
 @click.argument("gold_path", type=click.Path(exists=True, dir_okay=False))
 @click.option("--backend", "backend_name", default="lexicon", show_default=True)
+@click.option(
+    "--compare",
+    default=None,
+    metavar="BASELINE,CANDIDATE[,...]",
+    help="Measure several backends on the same gold set; the first is the baseline "
+    "for eval.beats_baseline().",
+)
 @click.option("--json", "as_json", is_flag=True, help="Print the full result as JSON.")
 @click.option("--no-alt-test", is_flag=True)
-def eval_cmd(gold_path: str, backend_name: str, as_json: bool, no_alt_test: bool) -> None:
-    """Evaluate a backend on a gold set (JSONL)."""
-    try:
-        backend = get_backend(backend_name)
-    except NotImplementedError as exc:
-        click.echo(f"ERROR: {exc}", err=True)
-        sys.exit(1)
+@click.pass_context
+def eval_cmd(
+    ctx: click.Context,
+    gold_path: str,
+    backend_name: str,
+    compare: str | None,
+    as_json: bool,
+    no_alt_test: bool,
+) -> None:
+    """Evaluate a backend on a gold set (JSONL), or compare several with --compare."""
+    names = [backend_name]
+    if compare is not None:
+        if ctx.get_parameter_source("backend_name") is ParameterSource.COMMANDLINE:
+            _fail("--compare and --backend exclude each other")
+        names = [n.strip() for n in compare.split(",") if n.strip()]
+        if len(names) < 2 or len(set(names)) != len(names):
+            _fail("--compare needs two or more different backends, e.g. lexicon,encoder")
+    chosen = [_backend(n) for n in names]
     gold = load_gold(gold_path)
-    res = evaluate(backend, gold, with_alt_test=not no_alt_test)
+    try:
+        results = [evaluate(b, gold, with_alt_test=not no_alt_test) for b in chosen]
+    except BackendUnavailable as exc:
+        _fail(str(exc))
+    if compare is None:
+        _print_result(results[0], as_json)
+    else:
+        _print_comparison(gold_path, results, as_json)
+
+
+def _print_result(res: EvalResult, as_json: bool) -> None:
     if as_json:
         click.echo(json.dumps(res.to_dict(), ensure_ascii=False, indent=2))
         return
@@ -155,6 +200,48 @@ def eval_cmd(gold_path: str, backend_name: str, as_json: bool, no_alt_test: bool
         )
     if res.failures:
         click.echo(f"failures: {len(res.failures)} (use --json for details)")
+
+
+def _print_comparison(gold_path: str, results: list[EvalResult], as_json: bool) -> None:
+    baseline, candidates = results[0], results[1:]
+    verdicts = {c.backend: beats_baseline(c, baseline) for c in candidates}
+    if as_json:
+        payload = {
+            "gold": gold_path,
+            "baseline": baseline.backend,
+            "min_gain": MIN_GAIN,
+            "beats_baseline": verdicts,
+            "results": [r.to_dict() for r in results],
+        }
+        click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+        return
+    click.echo(f"gold {gold_path} · n={baseline.n} · baseline {baseline.backend}")
+    click.echo(
+        f"{'backend':10} {'acc':>6} {'macro-F1':>8} {'kappa':>6} {'ECE':>6}  alt-test  model"
+    )
+    for r in results:
+        alt = (
+            f"{r.alt_test['omega']:.2f} {'PASS' if r.alt_test['passed'] else 'FAIL'}"
+            if r.alt_test
+            else "—"
+        )
+        click.echo(
+            f"{r.backend:10} {r.accuracy:6.3f} {r.macro_f1:8.3f} {r.kappa_vs_gold:6.3f} "
+            f"{r.ece:6.3f}  {alt:8}  {r.model_version}"
+        )
+    if baseline.by_tag:
+        click.echo("tag slices (accuracy):")
+        click.echo(f"  {'tag':14} {'n':>3}  " + "  ".join(f"{r.backend:>8}" for r in results))
+        for tag, row in baseline.by_tag.items():
+            accs = "  ".join(f"{r.by_tag[tag]['accuracy']:8.2f}" for r in results)
+            click.echo(f"  {tag:14} {row['n']:>3}  {accs}")
+    for c in candidates:
+        gain = c.macro_f1 - baseline.macro_f1
+        click.echo(
+            f"eval.beats_baseline({c.backend}, {baseline.backend}): "
+            f"{'yes' if verdicts[c.backend] else 'no'} — macro-F1 {gain:+.3f}, "
+            f"gate +{MIN_GAIN:.2f}"
+        )
 
 
 @main.command()

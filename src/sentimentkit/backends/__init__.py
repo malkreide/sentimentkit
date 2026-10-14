@@ -1,25 +1,23 @@
 """Backend registry.
 
-Stage 0 ships `lexicon`. The other three names are registered as
-``NotAvailable`` so that `sentimentkit backends` lists the full plan and a
-typo in `--backend` fails loudly instead of silently falling back.
+`lexicon` (stage 0) and `encoder` (stage 2) are implemented; the encoder needs
+the optional extra `encoder` at run time, not to be listed. The two LLM
+backends are registered as ``NotAvailable`` so that `sentimentkit backends`
+lists the full plan and a typo in `--backend` fails loudly instead of
+silently falling back.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
 
-from .base import Backend, Decision, NotAvailable
+from .base import Backend, BackendUnavailable, Decision, NotAvailable, decide_grouped
+from .encoder import EncoderBackend
 from .lexicon import LexiconBackend
 
 _REGISTRY: dict[str, Callable[[], Backend]] = {
     "lexicon": LexiconBackend,
-    "encoder": lambda: NotAvailable(
-        "encoder",
-        2,
-        "german-sentiment-bert / twitter-xlm-roberta-base-sentiment via transformers; "
-        "CPU-capable, Raspberry Pi 5 target",
-    ),
+    "encoder": EncoderBackend,
     "llm-score": lambda: NotAvailable(
         "llm-score",
         2,
@@ -50,4 +48,14 @@ def get_backend(name: str) -> Backend:
     return backend
 
 
-__all__ = ["Backend", "Decision", "LexiconBackend", "NotAvailable", "available", "get_backend"]
+__all__ = [
+    "Backend",
+    "BackendUnavailable",
+    "Decision",
+    "EncoderBackend",
+    "LexiconBackend",
+    "NotAvailable",
+    "available",
+    "decide_grouped",
+    "get_backend",
+]
