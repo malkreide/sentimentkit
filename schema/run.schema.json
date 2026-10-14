@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/malkreide/sentimentkit/schema/run.schema.json",
+  "title": "sentimentkit run metadata",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["run_id", "schema_version", "sentimentkit_version", "purpose", "backend", "model_version", "policy_hash", "anonymized", "n_items", "n_judgements", "n_review", "started_at", "params"],
+  "properties": {
+    "run_id": {"type": "string"},
+    "schema_version": {"type": "string"},
+    "sentimentkit_version": {"type": "string"},
+    "purpose": {"type": "string"},
+    "backend": {"type": "string"},
+    "model_version": {"type": "string"},
+    "policy_hash": {"type": "string", "minLength": 16, "maxLength": 16},
+    "anonymized": {"type": "boolean"},
+    "n_items": {"type": "integer", "minimum": 0},
+    "n_judgements": {"type": "integer", "minimum": 0},
+    "n_review": {"type": "integer", "minimum": 0},
+    "started_at": {"type": "string", "format": "date-time"},
+    "params": {"type": "object"}
+  }
+}

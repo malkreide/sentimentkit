@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/malkreide/sentimentkit/schema/gold.schema.json",
+  "title": "sentimentkit gold-set instance",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["text_id", "text", "gold"],
+  "properties": {
+    "text_id": {"type": "string"},
+    "text": {"type": "string", "minLength": 1},
+    "gold": {"type": "string", "enum": ["positive", "neutral", "negative", "not_mentioned", "unclear"]},
+    "aspect": {"type": "string"},
+    "aspect_terms": {"type": "array", "items": {"type": "string"}},
+    "lang": {"type": ["string", "null"]},
+    "annotators": {"type": "object", "additionalProperties": {"type": "string"}},
+    "tags": {"type": "array", "items": {"type": "string"}},
+    "note": {"type": "string"}
+  }
+}

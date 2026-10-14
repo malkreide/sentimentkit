@@ -1,0 +1,81 @@
+# Modifiers for the lexicon backend (German). Own work, MIT.
+#
+# negators: flip the sign. Two scopes are handled —
+#   (a) a negator within `window_before` tokens before the sentiment word
+#       ("nicht gut", "kein Problem")
+#   (b) German Satzklammer: a negator *after* the sentiment word, up to the
+#       end of the clause ("hat das Produkt ... nicht gekauft",
+#       "ist mit der Betreuung ... überhaupt nicht zufrieden")
+negators:
+  - nicht
+  - nie
+  - niemals
+  - nichts
+  - kein
+  - keine
+  - keinen
+  - keiner
+  - keinem
+  - keines
+  - ohne
+  - weder
+  - nöd      # Swiss German
+  - nid      # Swiss German
+  - ned      # Swiss German
+  - nüt      # Swiss German
+  - kaum     # 'kaum ein Fortschritt' = no progress; a negator, not a diminisher
+window_before: 5
+
+# intensifiers multiply the score
+intensifiers:
+  sehr: 1.5
+  extrem: 1.8
+  äusserst: 1.8
+  total: 1.5
+  absolut: 1.6
+  wirklich: 1.3
+  besonders: 1.4
+  mega: 1.5      # Swiss German / youth
+  voll: 1.3
+  richtig: 1.3
+  überhaupt: 1.4   # 'überhaupt nicht' — strengthens the negation
+  völlig: 1.6
+
+# Only these negators are applied in the Satzklammer scope (after the
+# sentiment word): 'wurde nie gelöst' negates 'gelöst', not 'Problem'.
+satzklammer_negators:
+  - nicht
+  - nöd
+  - nid
+  - ned
+
+# Sentence adverbs that keep their polarity under negation ('leider nicht' is
+# still 'leider').
+negation_immune:
+  - leider
+  - schade
+  - danke
+  - zum glück
+
+# diminishers multiply the score
+diminishers:
+  etwas: 0.6
+  wenig: 0.5
+  ein bisschen: 0.6
+  bisschen: 0.6
+  relativ: 0.7
+  eher: 0.7
+  chli: 0.6      # Swiss German 'a little'
+
+# contrast markers: text after them outweighs text before ("... , aber ...")
+contrast:
+  - aber
+  - jedoch
+  - allerdings
+  - trotzdem
+  - dennoch
+  - doch
+  - dagegen
+  - hingegen
+contrast_weight_after: 1.5
+contrast_weight_before: 0.5

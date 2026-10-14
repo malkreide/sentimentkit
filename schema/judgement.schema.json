@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/malkreide/sentimentkit/schema/judgement.schema.json",
+  "title": "sentimentkit judgement (evidence atom)",
+  "description": "One sentiment judgement for one text unit and one aspect, with full provenance. Every figure in a report must be reconstructible from a list of these.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "judgement_id", "run_id", "text_id", "aspect", "polarity", "intensity", "confidence", "backend", "model_version", "timestamp", "human_verified", "needs_review"],
+  "properties": {
+    "schema_version": {"type": "string", "const": "0.1"},
+    "judgement_id": {"type": "string", "minLength": 6},
+    "run_id": {"type": "string", "minLength": 6},
+    "text_id": {"type": "string", "minLength": 1},
+    "span": {"type": "array", "items": {"type": "integer", "minimum": 0}, "minItems": 2, "maxItems": 2},
+    "sentence": {"type": "string"},
+    "aspect": {"type": "string", "minLength": 1},
+    "polarity": {"type": "string", "enum": ["positive", "neutral", "negative", "not_mentioned", "unclear"]},
+    "intensity": {"type": "number", "minimum": -1, "maximum": 1},
+    "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+    "distribution": {"type": "object", "additionalProperties": {"type": "number", "minimum": 0, "maximum": 1}},
+    "backend": {"type": "string", "enum": ["lexicon", "encoder", "llm-score", "llm-cloud"]},
+    "model_version": {"type": "string", "minLength": 1},
+    "prompt_hash": {"type": ["string", "null"]},
+    "evidence": {"type": "array", "items": {"type": "string"}},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "human_verified": {"type": "boolean"},
+    "human_label": {"type": ["string", "null"], "enum": ["positive", "neutral", "negative", "not_mentioned", "unclear", null]},
+    "needs_review": {"type": "boolean"}
+  }
+}

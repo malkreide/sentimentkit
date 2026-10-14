@@ -1,0 +1,66 @@
+# sentimentkit policy — governance as code.
+#
+# Every run is checked against this file before any backend runs, and the
+# report step checks it again before anything is aggregated. A violation
+# aborts the run with exit code 2. The file is hashed into every RunMeta so a
+# report can later prove under which rules it was produced.
+#
+# Rationale (short): this toolkit judges the tone of *texts about topics*.
+# It must never become a tool that judges the *emotional state of a person*,
+# in particular not of pupils, parents as individuals, or staff — see
+# EU AI Act Art. 5(1)(f) (emotion recognition in education and at the
+# workplace) and the Swiss data-protection act (revDSG, purpose limitation).
+# The EU AI Act is orientation, not law, for the City of Zurich; the rules
+# below are stricter than either on purpose.
+
+version: 1
+
+# A run must declare its purpose; only listed purposes are allowed.
+purpose_required: true
+allowed_purposes:
+  - media_resonance          # public media coverage, aggregated
+  - survey_open_answers      # anonymised open answers from surveys
+  - inbox_triage             # tone/urgency as one triage feature, human gate
+  - public_debate            # council debates, consultations — topics, not persons
+  - own_communication        # the organisation's own texts
+  - evidence_for_journeys    # input for journeykit / personakit
+  - evaluation               # gold-set runs, benchmarks, fixtures
+
+# Dimensions the toolkit refuses to compute, whatever the backend offers.
+forbidden_dimensions:
+  - political_leaning
+  - person_emotion
+  - biometric
+  - mental_state
+
+# Contexts that are out of scope by design.
+forbidden_contexts:
+  - workplace_monitoring
+  - student_monitoring
+  - individual_social_media_monitoring
+
+# No judgement may be attributed to an identifiable person.
+per_person_profiles: false
+# Input `meta` keys that indicate a person-level identifier. If one is present
+# and per_person_profiles is false, the run aborts.
+person_identifier_keys:
+  - author_id
+  - author
+  - user_id
+  - email
+  - name
+  - sender
+  - ip
+
+# Reports never show a group below this size (k-anonymity floor).
+aggregation_floor: 20
+
+# Cloud backends only see anonymised input — the run must assert it.
+cloud_backends:
+  - llm-cloud
+cloud_backends_require_anonymized: true
+
+# Judgements below this confidence are routed to the human review queue.
+review_threshold: 0.6
+# Minimum margin between the top two options (distribution-based backends).
+review_margin: 0.15

@@ -1,0 +1,7 @@
+# Example typed-question aspects for school/parent feedback (German).
+# One judgement per aspect per text; absent aspects return `not_mentioned`.
+lehrperson: [lehrperson, lehrerin, lehrer, klassenlehrer, klassenlehrerin, unterricht]
+betreuung: [betreuung, hort, mittagstisch, tagesschule, aufsicht]
+kommunikation: [kommunikation, information, informationen, elternbrief, website, portal, mail]
+infrastruktur: [schulhaus, räume, raum, turnhalle, pausenplatz, toiletten, mensa]
+schulweg: [schulweg, schulbus, verkehr, bus]

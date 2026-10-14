@@ -1,0 +1,33 @@
+# sentimentkit synthetic German gold set (Stage 0). All sentences are invented;
+# nothing here is a real parent, pupil or staff statement. Two synthetic
+# annotators (a1, a2) so the alt-test code path runs. Tags slice the eval.
+{"text_id": "g001", "text": "Die Lehrperson war sehr freundlich und hilfsbereit.", "gold": "positive", "annotators": {"a1": "positive", "a2": "positive"}, "tags": ["plain", "intensifier"]}
+{"text_id": "g002", "text": "Der Ablauf bei der Anmeldung war chaotisch und frustrierend.", "gold": "negative", "annotators": {"a1": "negative", "a2": "negative"}, "tags": ["plain"]}
+{"text_id": "g003", "text": "Die Schule beginnt um acht Uhr und endet um zwölf Uhr.", "gold": "neutral", "annotators": {"a1": "neutral", "a2": "neutral"}, "tags": ["plain", "neutral"]}
+{"text_id": "g004", "text": "Die Betreuung war nicht gut.", "gold": "negative", "annotators": {"a1": "negative", "a2": "negative"}, "tags": ["negation"]}
+{"text_id": "g005", "text": "Wir hatten kein Problem mit dem Schulweg.", "gold": "positive", "annotators": {"a1": "positive", "a2": "neutral"}, "tags": ["negation"]}
+{"text_id": "g006", "text": "Die Schulleitung hat unsere Anliegen, obwohl wir mehrfach nachgefragt haben, nicht ernst genommen.", "gold": "negative", "annotators": {"a1": "negative", "a2": "negative"}, "tags": ["negation", "satzklammer"]}
+{"text_id": "g007", "text": "Ich bin mit der Kommunikation der Schule überhaupt nicht zufrieden.", "gold": "negative", "annotators": {"a1": "negative", "a2": "negative"}, "tags": ["negation", "satzklammer", "intensifier"]}
+{"text_id": "g008", "text": "Das Servicequalitätsproblem wurde nie gelöst.", "gold": "negative", "annotators": {"a1": "negative", "a2": "negative"}, "tags": ["compound"]}
+{"text_id": "g009", "text": "Die Lernfreude der Kinder ist spürbar gestiegen.", "gold": "positive", "annotators": {"a1": "positive", "a2": "positive"}, "tags": ["compound"]}
+{"text_id": "g010", "text": "Die Hausaufgabenbetreuung ist extrem zuverlässig organisiert.", "gold": "positive", "annotators": {"a1": "positive", "a2": "positive"}, "tags": ["intensifier"]}
+{"text_id": "g011", "text": "Die Räume sind etwas unklar beschildert.", "gold": "negative", "annotators": {"a1": "negative", "a2": "neutral"}, "tags": ["diminisher"]}
+{"text_id": "g012", "text": "Der Unterricht ist gut, aber die Pausenaufsicht ist mangelhaft.", "gold": "negative", "annotators": {"a1": "negative", "a2": "negative"}, "tags": ["contrast"]}
+{"text_id": "g013", "text": "Am Anfang gab es Probleme, aber jetzt läuft alles hervorragend.", "gold": "positive", "annotators": {"a1": "positive", "a2": "positive"}, "tags": ["contrast"]}
+{"text_id": "g014", "text": "Toll, schon wieder eine Verspätung beim Schulbus.", "gold": "negative", "annotators": {"a1": "negative", "a2": "negative"}, "tags": ["irony"], "note": "lexicon baseline is expected to fail here"}
+{"text_id": "g015", "text": "Super, das Formular ist zum dritten Mal verschwunden.", "gold": "negative", "annotators": {"a1": "negative", "a2": "negative"}, "tags": ["irony"], "note": "lexicon baseline is expected to fail here"}
+{"text_id": "g016", "text": "D Lehrerin isch mega nett gsi und hät üs guet gholfe.", "gold": "positive", "lang": "gsw", "annotators": {"a1": "positive", "a2": "positive"}, "tags": ["dialect"]}
+{"text_id": "g017", "text": "Das isch nöd guet glaufe, mir sind nöd zfride.", "gold": "negative", "lang": "gsw", "annotators": {"a1": "negative", "a2": "negative"}, "tags": ["dialect", "negation"]}
+{"text_id": "g018", "text": "Die Informationen zur Schulreise kamen rechtzeitig.", "gold": "neutral", "annotators": {"a1": "neutral", "a2": "positive"}, "tags": ["neutral"]}
+{"text_id": "g019", "text": "Wir sind dankbar für den Einsatz des ganzen Teams.", "gold": "positive", "annotators": {"a1": "positive", "a2": "positive"}, "tags": ["plain"]}
+{"text_id": "g020", "text": "Die Kürzungen beim Förderunterricht sind eine Enttäuschung.", "gold": "negative", "annotators": {"a1": "negative", "a2": "negative"}, "tags": ["plain"]}
+{"text_id": "g021", "text": "Die Mensa ist gut organisiert, das Essen schmeckt den Kindern.", "gold": "positive", "aspect": "mensa", "aspect_terms": ["mensa", "essen", "mittagstisch"], "annotators": {"a1": "positive", "a2": "positive"}, "tags": ["aspect"]}
+{"text_id": "g022", "text": "Die Lehrperson erklärt sehr klar.", "gold": "not_mentioned", "aspect": "mensa", "aspect_terms": ["mensa", "essen", "mittagstisch"], "annotators": {"a1": "not_mentioned", "a2": "not_mentioned"}, "tags": ["aspect", "aspect-absent"]}
+{"text_id": "g023", "text": "Der Unterricht ist gut, der Mittagstisch dagegen ein Chaos.", "gold": "negative", "aspect": "mensa", "aspect_terms": ["mensa", "essen", "mittagstisch"], "annotators": {"a1": "negative", "a2": "negative"}, "tags": ["aspect", "contrast"]}
+{"text_id": "g024", "text": "Es gibt keine Beschwerden von unserer Seite.", "gold": "positive", "annotators": {"a1": "positive", "a2": "neutral"}, "tags": ["negation"]}
+{"text_id": "g025", "text": "Die Anmeldung erfolgt online über das Elternportal.", "gold": "neutral", "annotators": {"a1": "neutral", "a2": "neutral"}, "tags": ["neutral"]}
+{"text_id": "g026", "text": "Leider wurde unser Gesuch abgelehnt.", "gold": "negative", "annotators": {"a1": "negative", "a2": "negative"}, "tags": ["plain"]}
+{"text_id": "g027", "text": "Die neue Website ist unkompliziert und transparent.", "gold": "positive", "annotators": {"a1": "positive", "a2": "positive"}, "tags": ["plain"]}
+{"text_id": "g028", "text": "Die Lehrperson ist kompetent, aber die Klasse ist zu gross und der Lärm unzumutbar.", "gold": "negative", "annotators": {"a1": "negative", "a2": "negative"}, "tags": ["contrast"]}
+{"text_id": "g029", "text": "Nichts an diesem Prozess war einfach.", "gold": "negative", "annotators": {"a1": "negative", "a2": "negative"}, "tags": ["negation"]}
+{"text_id": "g030", "text": "Es war kaum ein Fortschritt erkennbar.", "gold": "negative", "annotators": {"a1": "negative", "a2": "negative"}, "tags": ["diminisher", "hard"], "note": "no sentiment term in the seed lexicon; expected neutral-by-absence"}

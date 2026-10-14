@@ -1,0 +1,19 @@
+# .github/repo-meta.yml — von der github-repo Skill gepflegt
+repo_name: sentimentkit
+title: sentimentkit
+description: Sentiment toolkit with swappable backends, evidence atoms, eval harness and policy-as-code
+topics: [sentiment-analysis, nlp, german, evaluation, ai-governance, python, claude-skill, open-source]
+project_type: python-lib
+visibility: public
+license: MIT
+author_legal_name: Hayal Özkan
+author_label: Autor
+github_user: malkreide
+default_branch: main
+language: python
+version: 0.1.0
+pypi_package: sentimentkit
+confirmed: false          # aus dem Konzept abgeleitet, vom User noch nicht bestätigt
+offen:
+  - Repo auf github.com anlegen (Session ohne Repo-Anlage-Recht), Topics in der Settings-UI setzen
+  - Secret Scanning + Push Protection aktivieren (Schritt 9.6)

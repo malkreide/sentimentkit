@@ -1,0 +1,130 @@
+# sentimentkit seed lexicon (German). Own work, MIT. Not derived from SentiWS
+# or GerVADER — their licences (CC BY-SA-NC) are an open decision, see
+# docs/ROADMAP.md. Format: lemma<TAB>polarity in [-1, 1]. Lowercase. Comments
+# start with '#'. This is a BASELINE, not a model: it exists so every other
+# backend has something it must beat on the gold set.
+#
+# positive
+gut	0.5
+sehr gut	0.7
+super	0.8
+toll	0.7
+grossartig	0.8
+grosszügig	0.5
+hervorragend	0.9
+ausgezeichnet	0.9
+exzellent	0.9
+wunderbar	0.8
+schön	0.5
+freundlich	0.6
+hilfsbereit	0.7
+kompetent	0.7
+engagiert	0.6
+zuverlässig	0.7
+verlässlich	0.7
+klar	0.4
+transparent	0.5
+schnell	0.4
+unkompliziert	0.6
+einfach	0.3
+dankbar	0.7
+danke	0.6
+zufrieden	0.7
+begeistert	0.9
+freude	0.7
+freut	0.6
+gelungen	0.7
+erfolgreich	0.6
+wertvoll	0.6
+sinnvoll	0.5
+hilfreich	0.6
+positiv	0.5
+lob	0.6
+loben	0.6
+empfehlen	0.6
+vorbildlich	0.8
+liebevoll	0.7
+sicher	0.3
+verbessert	0.5
+verbesserung	0.5
+# negative
+schlecht	-0.6
+schlimm	-0.7
+katastrophal	-0.9
+katastrophe	-0.9
+furchtbar	-0.8
+schrecklich	-0.8
+enttäuschend	-0.7
+enttäuscht	-0.7
+enttäuschung	-0.7
+ärgerlich	-0.6
+ärger	-0.6
+verärgert	-0.7
+wütend	-0.8
+frustrierend	-0.7
+frustriert	-0.7
+frust	-0.7
+unzufrieden	-0.7
+unzufriedenheit	-0.7
+problem	-0.5
+probleme	-0.5
+mangel	-0.6
+mängel	-0.6
+mangelhaft	-0.7
+fehler	-0.5
+fehlerhaft	-0.6
+chaos	-0.7
+chaotisch	-0.7
+unklar	-0.4
+intransparent	-0.6
+unfreundlich	-0.7
+inkompetent	-0.8
+unzuverlässig	-0.7
+langsam	-0.4
+kompliziert	-0.4
+umständlich	-0.5
+überfordert	-0.6
+überlastet	-0.6
+stress	-0.5
+stressig	-0.5
+sorge	-0.4
+sorgen	-0.4
+besorgt	-0.5
+angst	-0.6
+beschwerde	-0.6
+beschweren	-0.6
+kritik	-0.4
+kritisieren	-0.4
+versagen	-0.8
+versagt	-0.8
+skandal	-0.8
+unmöglich	-0.5
+unzumutbar	-0.8
+defekt	-0.6
+kaputt	-0.6
+verspätung	-0.5
+verspätet	-0.5
+ignoriert	-0.6
+ignorieren	-0.6
+abgelehnt	-0.4
+ablehnung	-0.4
+kürzung	-0.4
+kürzungen	-0.4
+streichen	-0.4
+gestrichen	-0.4
+negativ	-0.5
+leider	-0.3
+schade	-0.4
+# multiword (matched on token bigrams/trigrams)
+ernst genommen	0.5
+ernst nehmen	0.5
+ernst nimmt	0.5
+beschwerden	-0.6
+fortschritt	0.5
+fortschritte	0.5
+# Swiss German seed (dialect runs are flagged DIALECT? and down-weighted)
+guet	0.5
+nett	0.6
+zfride	0.7
+schlächt	-0.6
+gholfe	0.4
