@@ -22,6 +22,7 @@ from typing import Any
 from ..backends.base import Backend, decide_grouped
 from ..models import Polarity
 from .alt_test import AltTestResult, alt_test
+from .calibration import Calibration, calibrate, sample
 from .metrics import accuracy, cohen_kappa, confusion, expected_calibration_error, macro_f1
 
 
@@ -71,6 +72,8 @@ class EvalResult:
     confusion: dict[str, dict[str, int]]
     by_tag: dict[str, dict[str, float]]
     alt_test: dict[str, Any] | None = None
+    # temperature scaling, for backends whose distribution is a softmax
+    calibration: dict[str, Any] | None = None
     failures: list[dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
@@ -101,6 +104,15 @@ def evaluate(
     golds = [g.gold for g in gold]
     correct = [p == gl for p, gl in zip(preds, golds)]
 
+    cal: Calibration | None = None
+    if backend.softmax_distribution:
+        cal = calibrate(
+            [
+                sample(d.distribution, d.polarity.value, d.confidence, ok)
+                for d, ok in zip(decisions, correct)
+            ]
+        )
+
     by_tag: dict[str, dict[str, float]] = {}
     idx_by_tag: dict[str, list[int]] = defaultdict(list)
     for i, g in enumerate(gold):
@@ -129,6 +141,7 @@ def evaluate(
         confusion=confusion(golds, preds),
         by_tag=by_tag,
         alt_test=asdict(alt) if alt else None,
+        calibration=asdict(cal) if cal else None,
         failures=failures,
     )
 
@@ -152,6 +165,7 @@ __all__ = [
     "beats_baseline",
     "MIN_GAIN",
     "alt_test",
+    "calibrate",
     "accuracy",
     "macro_f1",
     "cohen_kappa",

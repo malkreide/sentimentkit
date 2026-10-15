@@ -38,15 +38,16 @@ sentimentkit backends       # zeigt, welche Backends in dieser Stufe verfügbar 
    `report.md` (Aggregation ab n ≥ 20).
 5. **Ergebnis einordnen.** Immer mitliefern: Backend und `model_version`,
    Anteil in der Review-Queue, bekannte Schwächen des Backends (Lexikon: Ironie,
-   Dialekt; Encoder: unkalibriert, irrt auch mit hoher Konfidenz, eine leere
-   Review-Queue heisst dort nicht «alles sicher»). Zahlen unter der Aggregationsschwelle werden nicht berichtet —
+   Dialekt; Encoder und llm-score: irren auch mit hoher Konfidenz, eine leere
+   Review-Queue heisst dort nicht «alles sicher»; llm-score schickt die Texte an
+   den konfigurierten Scoring-Server). Zahlen unter der Aggregationsschwelle werden nicht berichtet —
    auch nicht mündlich.
 6. **Evaluation** statt Bauchgefühl, wenn ein Backend gewählt werden soll:
    ```bash
    sentimentkit eval fixtures/de_synthetic_gold.jsonl --backend lexicon --json
    sentimentkit eval fixtures/de_synthetic_gold.jsonl --compare lexicon,encoder
    ```
-   Macro-F1, Kappa, ECE, Tag-Slices, alt-test (ω ≥ 0.5 = Backend darf
+   Macro-F1, Kappa, ECE vor und nach Temperature-Scaling, Tag-Slices, alt-test (ω ≥ 0.5 = Backend darf
    menschliche Annotation ersetzen, Calderon et al. 2025).
 
 ## Antwortformat

@@ -59,9 +59,12 @@ was die Baseline nicht kann, und sind der Massstab für Stufe 2.
 
 `confidence` ist die Selbsteinschätzung des Backends, keine Trefferwahrschein-
 lichkeit. Erst die Kalibrierung auf dem Gold-Set (ECE) sagt, ob 0.8 auch
-«80 % richtig» bedeutet. Das Gate (`gate.py`) schickt Urteile in die
-Review-Queue, wenn `confidence < review_threshold`, die Polarität `unclear`
-ist oder die Top-2-Optionen näher als `review_margin` liegen.
+«80 % richtig» bedeutet. `sentimentkit eval` passt dafür bei Softmax-Backends
+(`encoder`, `llm-score`) eine Temperatur an und gibt die ECE vorher und nachher
+aus (kreuzvalidiert); die Schwellen selbst bleiben in `policy.yaml`.
+Das Gate (`gate.py`) schickt Urteile in die Review-Queue, wenn
+`confidence < review_threshold`, die Polarität `unclear` ist oder die
+Top-2-Optionen näher als `review_margin` liegen.
 
 ## Was bewusst fehlt
 
