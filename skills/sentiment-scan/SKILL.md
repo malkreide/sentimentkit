@@ -47,6 +47,8 @@ sentimentkit backends       # zeigt, welche Backends in dieser Stufe verfügbar 
    sentimentkit eval fixtures/de_synthetic_gold.jsonl --backend lexicon --json
    sentimentkit eval fixtures/de_synthetic_gold.jsonl --compare lexicon,encoder
    ```
+   Für einen Entscheid auf dem echten Gold-Set: `--split test` und die
+   Kriterien aus `docs/ROADMAP.md` (Abschnitt «Gate der Stufe 2»).
    Macro-F1, Kappa, ECE vor und nach Temperature-Scaling, Tag-Slices, alt-test (ω ≥ 0.5 = Backend darf
    menschliche Annotation ersetzen, Calderon et al. 2025).
 

@@ -182,3 +182,37 @@ def test_builder_output_round_trips(build_candidates, to_gold, tmp_path):
     gold = load_gold(out)
     assert len(gold) == len(rows)
     assert not any(t.endswith("?") for g in gold for t in g.tags)
+
+
+def test_split_keeps_documents_together_and_is_seeded(to_gold):
+    labels = ["positive", "negative", "neutral", "negative"]
+    instances = [
+        {"text_id": f"doc{d}-s{s:03d}", "gold": labels[(d + s) % 4]}
+        for d in range(40)
+        for s in range(1, 1 + d % 4)
+    ]
+    to_gold.assign_splits(instances, test_share=0.6, seed=0)
+    sides: dict[str, set[str]] = {}
+    for inst in instances:
+        sides.setdefault(to_gold.document_of(inst["text_id"]), set()).add(inst["split"])
+    assert all(len(s) == 1 for s in sides.values())  # no document on both sides
+    for label in set(labels):
+        of_label = [i for i in instances if i["gold"] == label]
+        share = sum(i["split"] == "test" for i in of_label) / len(of_label)
+        assert 0.45 <= share <= 0.75
+    again = [{k: v for k, v in i.items() if k != "split"} for i in instances]
+    to_gold.assign_splits(again, test_share=0.6, seed=0)
+    assert [i["split"] for i in again] == [i["split"] for i in instances]
+    with pytest.raises(to_gold.InputError, match="test-share"):
+        to_gold.assign_splits(again, test_share=1.0)
+
+
+def test_gold_lines_carry_their_split(to_gold, tmp_path, capsys):
+    f1, f2 = _annotated(tmp_path)
+    out = tmp_path / "gold.jsonl"
+    assert to_gold.main([str(f1), str(f2), "-o", str(out)]) == 0
+    lines = [json.loads(x) for x in out.read_text(encoding="utf-8").splitlines()]
+    assert {i["split"] for i in lines} <= {"dev", "test"}
+    assert all(i["split"] for i in lines)
+    assert "split           test" in capsys.readouterr().out
+    assert to_gold.document_of("syn-news-001-s003") == to_gold.document_of("syn-news-001-t")
