@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Policy rule for scoring servers: `local_scoring_hosts` in `policy.yaml` (default `localhost`, `127.0.0.1`, `::1`). A backend that sends texts to a server (`llm-score`) is local only for a host on that list; any other host counts as a cloud backend: the run must be declared anonymised, the server must be reached over https, otherwise exit code 2 before any text is sent. `Backend.endpoint` names the server; `run.json` records it under `params.endpoint`
+- `sentimentkit eval` checks the policy too (purpose `evaluation`), with `--policy` and `--anonymized`; before, the gold texts reached a backend without any check
 - Tools for the stage-2 gate in `sentimentkit eval`: `--split dev|test` (with `test`, a softmax backend's temperature is fitted on dev and the ECE measured on test); `macro_f1_polar` (macro-F1 over positive, neutral, negative) and `--gate-metric` for `eval.beats_baseline()`; a paired 95 % bootstrap interval for each candidate's gain in `--compare` (`gain` in `--json`); review figures, i.e. what the review gate in `policy.yaml` would route and how many errors it catches (`--policy`); `gold_labels` and `predictions` in every result
 - `scripts/candidates_to_gold.py` writes a fixed dev/test `split` into every gold line: about `--test-share` (default 0.6) in test, whole documents on one side, gold labels spread evenly, seeded (`--split-seed`); `schema/gold.schema.json` gets the optional `split` field
 - `docs/ROADMAP.md`: proposed criteria for the stage-2 gate, to be decided before the run on `gold_v1`

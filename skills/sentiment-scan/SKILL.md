@@ -25,7 +25,8 @@ sentimentkit backends       # zeigt, welche Backends in dieser Stufe verfügbar 
 2. **Daten prüfen.** Input ist CSV/TSV (Spalte `text`), JSONL (`{"text": …}`),
    JSON-Liste, Markdown oder TXT (Absätze). Spalten wie `author_id`, `email`,
    `name` müssen vorher entfernt werden; sonst bricht der Lauf ab.
-   Cloud-Backends verlangen `--anonymized`.
+   Cloud-Backends verlangen `--anonymized`, ebenso `llm-score` mit einem Server
+   ausserhalb von `local_scoring_hosts` in `policy.yaml`.
 3. **Aspekte definieren** (optional). YAML `{aspekt: [terme]}`; Vorlage:
    `fixtures/aspects_schule.yaml`.
 4. **Lauf**

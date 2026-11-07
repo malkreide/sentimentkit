@@ -38,6 +38,7 @@ from sentimentkit.cli import main
 from sentimentkit.eval import evaluate, load_gold
 from sentimentkit.models import Polarity, TextItem, stable_hash
 from sentimentkit.pipeline import run
+from sentimentkit.policy import PolicyViolation
 
 ROOT = Path(__file__).resolve().parents[1]
 FIX = ROOT / "fixtures"
@@ -441,3 +442,39 @@ def test_cli_compare_prints_ece_before_and_after(monkeypatch):
     assert "ECE-TS" in r.output
     assert "llm-score: calibration: ECE" in r.output
     assert "eval.beats_baseline(llm-score, lexicon):" in r.output
+
+
+# ------------------------------------------------------------------ policy
+def test_remote_server_is_stopped_before_any_text_is_sent(policy):
+    server = FakeServer()
+    remote = fake_llm(server=server, base_url="https://gpu.example.org:30000")
+    with pytest.raises(PolicyViolation, match="not in policy.local_scoring_hosts"):
+        run(
+            [TextItem(text="Die Mensa ist super.")],
+            policy=policy,
+            purpose="evaluation",
+            backend=remote,
+        )
+    assert server.posts == [] and server.gets == []
+
+
+def test_run_meta_names_the_endpoint_without_credentials(policy):
+    items = [TextItem(text="Die Mensa ist super.")]
+    res = run(items, policy=policy, purpose="evaluation", backend=fake_llm())
+    assert res.meta.params["endpoint"] == "http://localhost:30000"
+    secret = fake_llm(base_url="http://user:s3cret@localhost:30000")
+    res = run(items, policy=policy, purpose="evaluation", backend=secret)
+    assert res.meta.params["endpoint"] == "http://localhost:30000"
+
+
+@pytest.mark.parametrize("command", ["analyze", "eval"])
+def test_cli_refuses_a_remote_server_with_exit_2(monkeypatch, tmp_path, command):
+    monkeypatch.setenv(ENV_BASE_URL, "https://gpu.example.org:30000")
+    if command == "analyze":
+        args = ["analyze", str(FIX / "survey_synthetic.csv"), "--purpose", "survey_open_answers"]
+        args += ["--backend", "llm-score", "-o", str(tmp_path / "o")]
+    else:
+        args = ["eval", str(FIX / "de_synthetic_gold.jsonl"), "--backend", "llm-score"]
+    r = CliRunner().invoke(main, args)
+    assert r.exit_code == 2
+    assert "POLICY VIOLATION" in r.output and "gpu.example.org" in r.output

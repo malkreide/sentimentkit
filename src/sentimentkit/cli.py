@@ -179,8 +179,10 @@ def analyze(
     "policy_path",
     type=click.Path(exists=True, dir_okay=False),
     default=None,
-    help="Review thresholds for the review figures (default: policy.yaml).",
+    help="Policy to check the run against; its review thresholds give the review figures "
+    "(default: policy.yaml).",
 )
+@click.option("--anonymized", is_flag=True, help="Assert that the gold set is anonymised.")
 @click.option("--json", "as_json", is_flag=True, help="Print the full result as JSON.")
 @click.option("--no-alt-test", is_flag=True)
 @click.pass_context
@@ -192,10 +194,14 @@ def eval_cmd(
     split: str | None,
     gate_metric: str,
     policy_path: str | None,
+    anonymized: bool,
     as_json: bool,
     no_alt_test: bool,
 ) -> None:
-    """Evaluate a backend on a gold set (JSONL), or compare several with --compare."""
+    """Evaluate a backend on a gold set (JSONL), or compare several with --compare.
+
+    The gold texts reach the backends too, so the run is checked against the
+    policy first, with the purpose `evaluation`."""
     names = [backend_name]
     if compare is not None:
         if ctx.get_parameter_source("backend_name") is ParameterSource.COMMANDLINE:
@@ -205,6 +211,14 @@ def eval_cmd(
             _fail("--compare needs two or more different backends, e.g. lexicon,encoder")
     chosen = [_backend(n) for n in names]
     pol = load_policy(policy_path)
+    try:
+        for b in chosen:
+            pol.check_run(
+                purpose="evaluation", backend=b.name, anonymized=anonymized, endpoint=b.endpoint
+            )
+    except PolicyViolation as exc:
+        click.echo(f"POLICY VIOLATION: {exc}", err=True)
+        sys.exit(EXIT_POLICY)
     gold = load_gold(gold_path)
     dev: list[GoldInstance] | None = None
     if split is not None:

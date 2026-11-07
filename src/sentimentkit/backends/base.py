@@ -53,6 +53,9 @@ class Backend(ABC):
     # True when `distribution` is a softmax and the polarity its argmax:
     # then `sentimentkit eval` can fit a temperature to it.
     softmax_distribution: bool = False
+    # The server the texts are sent to; None when they stay in this process.
+    # The policy checks it before the run (policy.local_scoring_hosts).
+    endpoint: str | None = None
 
     @property
     @abstractmethod
