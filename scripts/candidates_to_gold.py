@@ -21,7 +21,12 @@ Per row:
   are dropped;
 * ``aspect`` (default ``schule``) and ``aspect_terms`` (the keyword list that
   selected the sentence) make the instance a typed question, so
-  ``not_mentioned`` is a reachable answer.
+  ``not_mentioned`` is a reachable answer;
+* ``split`` is ``dev`` (calibration, tuning) or ``test`` (the stage-2 gate),
+  about ``--test-share`` of the instances in test. Whole documents go to one
+  side (the ``<doc>-s001`` part of ``text_id``), so two sentences of one
+  article never sit on both, and the gold labels are spread evenly. The
+  assignment is seeded: the same input gives the same split.
 
 Every line is validated against ``schema/gold.schema.json`` before anything is
 written. The summary reports Cohen's kappa a1 vs. a2 (target >= 0.7) and the
@@ -36,9 +41,10 @@ import argparse
 import csv
 import io
 import json
+import random
 import re
 import sys
-from collections import Counter
+from collections import Counter, defaultdict
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -205,6 +211,38 @@ def to_instance(
     return inst, "ok"
 
 
+_SENTENCE_ID = re.compile(r"-(?:s\d+|t)$")
+
+
+def document_of(text_id: str) -> str:
+    """The source document of a candidate (``doc-17-s003`` -> ``doc-17``)."""
+    return _SENTENCE_ID.sub("", text_id)
+
+
+def assign_splits(instances: Sequence[dict], *, test_share: float = 0.6, seed: int = 0) -> None:
+    """Set ``split`` on every instance: whole documents to one side, greedily
+    towards ``test_share`` of each gold label in test."""
+    if not 0 < test_share < 1:
+        raise InputError("--test-share must lie between 0 and 1")
+    docs: dict[str, list[dict]] = defaultdict(list)
+    for inst in instances:
+        docs[document_of(inst["text_id"])].append(inst)
+    order = sorted(docs)
+    random.Random(seed).shuffle(order)
+    total = Counter(i["gold"] for i in instances)
+    in_test: Counter[str] = Counter()
+    in_dev: Counter[str] = Counter()
+    for doc in order:
+        labels = Counter(i["gold"] for i in docs[doc])
+        # how far each side is below its target for this document's labels
+        need_test = sum(n * (test_share * total[g] - in_test[g]) for g, n in labels.items())
+        need_dev = sum(n * ((1 - test_share) * total[g] - in_dev[g]) for g, n in labels.items())
+        side, counter = ("test", in_test) if need_test >= need_dev else ("dev", in_dev)
+        counter.update(labels)
+        for inst in docs[doc]:
+            inst["split"] = side
+
+
 def validate(instances: Sequence[dict], schema_path: str | Path) -> None:
     schema = json.loads(Path(schema_path).read_text(encoding="utf-8"))
     validator = jsonschema.Draft202012Validator(schema)
@@ -237,6 +275,8 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--schema", type=Path, default=DEFAULT_SCHEMA)
     ap.add_argument("--policy", type=Path, default=None)
     ap.add_argument("--min-kappa", type=float, default=0.7)
+    ap.add_argument("--test-share", type=float, default=0.6, help="share of instances in test")
+    ap.add_argument("--split-seed", type=int, default=0)
     return ap
 
 
@@ -259,6 +299,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 instances.append(inst)
         if not instances:
             raise InputError("no row with at least two labels")
+        assign_splits(instances, test_share=args.test_share, seed=args.split_seed)
         validate(instances, args.schema)
     except PolicyViolation as exc:
         print(f"POLICY VIOLATION: {exc}", file=sys.stderr)
@@ -277,7 +318,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(f"  incomplete    -{status['incomplete']}")
     print(f"gold instances  {len(instances)} -> {args.output}")
     for label, n in Counter(i["gold"] for i in instances).most_common():
-        print(f"  {label:14} {n}")
+        test = sum(1 for i in instances if i["gold"] == label and i["split"] == "test")
+        print(f"  {label:14} {n:4}  (test {test}, dev {n - test})")
+    n_test = sum(i["split"] == "test" for i in instances)
+    print(f"split           test {n_test} · dev {len(instances) - n_test} (whole documents)")
     agree = agreement(instances)
     if agree:
         n, raw, kappa = agree

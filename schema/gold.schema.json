@@ -15,6 +15,7 @@
     "annotators": {"type": "object", "additionalProperties": {"type": "string"}},
     "tags": {"type": "array", "items": {"type": "string"}},
     "source": {"type": "string"},
+    "split": {"type": "string", "enum": ["dev", "test"]},
     "note": {"type": "string"}
   }
 }

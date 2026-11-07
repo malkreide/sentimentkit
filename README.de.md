@@ -88,7 +88,7 @@ Stufe 1 ersetzt das Fixture durch 300–500 reale Sätze aus öffentlichen Quell
    ```
    Ergebnis: `fixtures/gold_v1_candidates.csv` mit `text_id, text, source, a1, a2, tags, note`. Regelbasierte Vorschläge wie `negation?` gelten erst, wenn eine annotierende Person das `?` entfernt.
 3. **Annotieren** nach [docs/ANNOTATION.md](docs/ANNOTATION.md) — jede Person in einer eigenen Kopie, nur in der eigenen Spalte.
-4. **Zum Gold-Set zusammenführen.** Die Kopien werden über `text_id` vereint; `gold` ist das Mehrheitslabel, bei Dissens `unclear` (eine optionale dritte Spalte `a3` schlichtet). Jede Zeile wird gegen `schema/gold.schema.json` geprüft; das Skript gibt Cohen's κ (Ziel ≥ 0.7) und die Tag-Slices des Stufe-1-Gates aus.
+4. **Zum Gold-Set zusammenführen.** Die Kopien werden über `text_id` vereint; `gold` ist das Mehrheitslabel, bei Dissens `unclear` (eine optionale dritte Spalte `a3` schlichtet). Jede Zeile wird gegen `schema/gold.schema.json` geprüft; das Skript gibt Cohen's κ (Ziel ≥ 0.7) und die Tag-Slices des Stufe-1-Gates aus und schreibt einen festen Dev/Test-`split` (`--test-share`, Default 0.6; ganze Dokumente auf einer Seite).
    ```bash
    python scripts/candidates_to_gold.py gold_v1_a1.csv gold_v1_a2.csv -o fixtures/gold_v1.jsonl
    ```
@@ -184,7 +184,7 @@ Für Backends, deren Verteilung ein Softmax ist (`encoder`, `llm-score`), passt 
 calibration: ECE 0.351 → 0.205 after temperature scaling (T=6.215, 5-fold cross-fitted, 29 of 30 judgements rescaled)
 ```
 
-T wird auf den Log-Loss «Top-Label richtig» angepasst, also auf die Grösse, die ECE und das Review-Gate lesen. Ein Gold-Label ausserhalb des Antwortraums eines Backends (der Encoder kennt kein `unclear`) kann T so nicht ins Unendliche treiben. Die ECE nach dem Scaling ist 5-fach kreuzvalidiert: Kein Urteil wird mit einem T skaliert, das auf ihm selbst angepasst wurde. Scaling ändert nie, welche Option gewinnt; Accuracy und F1 bleiben gleich. Regelbasierte Antworten (das `not_mentioned` des Encoders aus dem Teilsatz-Scoping) behalten ihre Konfidenz. Für `llm-score` setzt du das angepasste T mit `SENTIMENTKIT_LLM_CALIBRATION_T`; es wird Teil von `model_version`. Die Review-Schwellen bleiben in `policy.yaml`.
+T wird auf den Log-Loss «Top-Label richtig» angepasst, also auf die Grösse, die ECE und das Review-Gate lesen. Ein Gold-Label ausserhalb des Antwortraums eines Backends (der Encoder kennt kein `unclear`) kann T so nicht ins Unendliche treiben. Mit `--split test` wird T auf dem Dev-Teil angepasst und die ECE auf dem Test-Teil gemessen; sonst ist die ECE nach dem Scaling 5-fach kreuzvalidiert. So oder so wird kein Urteil mit einem T skaliert, das auf ihm selbst angepasst wurde. Scaling ändert nie, welche Option gewinnt; Accuracy und F1 bleiben gleich. Regelbasierte Antworten (das `not_mentioned` des Encoders aus dem Teilsatz-Scoping) behalten ihre Konfidenz. Für `llm-score` setzt du das angepasste T mit `SENTIMENTKIT_LLM_CALIBRATION_T`; es wird Teil von `model_version`. Die Review-Schwellen bleiben in `policy.yaml`.
 
 Gemessen auf dem Fixture-Set der Stufe 0 (30 synthetische deutsche Sätze). Qwen3-4B lief in bf16 über transformers auf einer CPU hinter einem Stellvertreter-Server, der `/v1/score` und `/api/generate` so beantwortet, wie es SGLang 0.5.21 und die Ollama-API-Dokumentation festlegen. Das sind nicht SGLang oder Ollama selbst: Deren Kernels und Ollamas 4-Bit-Quantisierung verschieben die Zahlen etwas. Beide Scoring-Wege lieferten auf allen 30 Sätzen identische Vorhersagen.
 
@@ -209,13 +209,26 @@ Diese Zahlen mit Vorsicht lesen:
 - **Es irrt mit hoher Sicherheit.** Alle drei Fehler haben Konfidenz 1.0, das Review-Gate fängt sie also nicht. Die rohe ECE von 0.096 liegt nur deshalb unter der Schwelle der Stufe 2, weil 27 Treffer bei derselben 1.0 liegen. Kreuzvalidiertes Temperature-Scaling verschlechtert sie hier (0.149): Wenn Fehler so sicher sind wie Treffer, kann eine einzige Temperatur sie nicht trennen. `SENTIMENTKIT_LLM_CALIBRATION_T` nicht aus diesem Fixture setzen.
 - Tempo auf dieser CPU ohne bf16-Unterstützung: rund 17 s pro Frage. Das sagt nichts über eine GPU oder Ollama auf einem Raspberry Pi; der Lauf auf dem Pi, den die Roadmap verlangt, ist noch offen.
 
+### Werkzeug für das Gate
+
+`sentimentkit eval` bringt mit, was der Entscheid der Stufe 2 braucht. Die vorgeschlagenen Kriterien stehen in [docs/ROADMAP.md](docs/ROADMAP.md); sie werden vor dem Lauf auf `gold_v1` festgelegt.
+
+- **`--split dev|test`**: `candidates_to_gold.py` schreibt einen festen Split ins Gold-Set: rund 60 % Test, ganze Dokumente auf einer Seite, mit Seed. Mit `--split test` wird die Temperatur eines Softmax-Backends auf dem Dev-Teil angepasst und die ECE auf dem Test-Teil gemessen.
+- **`--gate-metric macro_f1_polar`**: Macro-F1 nur über positiv, neutral und negativ. `not_mentioned` entscheidet in jedem Backend dieselbe Schlüsselwort-Regel und sagt deshalb nichts über ein Modell. Default bleibt `macro_f1`.
+- **Bootstrap-Intervall**: `--compare` gibt für jeden Kandidaten den Gewinn gegenüber der Baseline mit einem gepaarten 95-%-Bootstrap-Intervall aus, und ob es 0 ausschliesst. `--json` legt es unter `gain` ab, und jedes Ergebnis enthält `gold_labels` und `predictions` für weitere gepaarte Tests.
+- **Review-Kennzahlen**: was das Review-Gate aus `policy.yaml` in die Prüfung schicken würde und wie viele Fehler es fängt (`review` in `--json`). Ein Backend, das mit Konfidenz 1.0 irrt, fällt hier auf, auch wenn sein F1 gut aussieht.
+
+```bash
+sentimentkit eval fixtures/gold_v1.jsonl --compare lexicon,encoder,llm-score --split test --gate-metric macro_f1_polar
+```
+
 ## Verfügbare Tools
 
 | Befehl | Beschreibung |
 |---|---|
 | `sentimentkit analyze INPUT --purpose P [--backend B] [--aspects A.yaml] [-o DIR]` | Jeden Text beurteilen; Atome, Run-Meta, Review-Queue und Report schreiben |
-| `sentimentkit eval GOLD.jsonl [--backend B] [--json]` | Kennzahlen, Tag-Slices, alt-test, Kalibrierung (ECE vor/nach Temperature-Scaling), Fehlerliste |
-| `sentimentkit eval GOLD.jsonl --compare B1,B2[,…] [--json]` | Jedes Backend auf demselben Gold-Set, nebeneinander, dazu `eval.beats_baseline()` gegen B1 |
+| `sentimentkit eval GOLD.jsonl [--backend B] [--split dev\|test] [--json]` | Kennzahlen inkl. polarem Macro-F1, Tag-Slices, alt-test, Kalibrierung (ECE vor/nach Temperature-Scaling), Review-Kennzahlen, Fehlerliste |
+| `sentimentkit eval GOLD.jsonl --compare B1,B2[,…] [--gate-metric M] [--json]` | Jedes Backend auf demselben Gold-Set, nebeneinander, dazu `eval.beats_baseline()` gegen B1 mit Bootstrap-Intervall |
 | `sentimentkit backends` | Backends auflisten: verfügbar, Extra fehlt oder Roadmap-Stufe |
 | `sentimentkit policy-check [--policy DATEI]` | Policy laden und Hash ausgeben |
 | `sentimentkit validate judgements.jsonl` | Atome gegen das JSON-Schema prüfen |

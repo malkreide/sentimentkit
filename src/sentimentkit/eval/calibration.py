@@ -8,8 +8,10 @@ honest on a small gold set:
 - T is fitted on the log-loss of the top label being right, the quantity ECE
   and the gate look at. A gold label outside a backend's answer set (the
   encoder has no `unclear`) cannot pull T towards infinity that way.
-- The reported ECE is cross-fitted: every judgement is rescaled with a T
-  fitted on the other folds, never on itself.
+- The reported ECE is never measured on the judgements T was fitted on:
+  with a dev set (`fit_on`), T comes from the dev set and the ECE from the
+  evaluated set; without one it is cross-fitted, every judgement rescaled
+  with a T fitted on the other folds.
 
 Judgements whose confidence is not their distribution's top (rule-based
 answers such as an encoder's `not_mentioned` from clause scoping) keep their
@@ -42,11 +44,13 @@ class Sample:
 
 @dataclass(frozen=True)
 class Calibration:
-    temperature: float  # fitted on all samples, the value to configure
+    temperature: float  # the value to configure: fitted on the dev set, else on all samples
     ece_before: float
-    ece_after: float  # cross-fitted
-    folds: int
+    ece_after: float  # with T from the dev set, else cross-fitted
+    folds: int  # 0 when T came from a dev set
     n_scaled: int
+    method: str = "cross-fitted"  # or "dev"
+    n_fit: int = 0  # judgements T was fitted on
 
 
 def sample(
@@ -96,30 +100,51 @@ def answer_set(samples: Sequence[Sample]) -> list[str]:
 
 
 def calibrate(
-    samples: Sequence[Sample], *, folds: int = FOLDS, seed: int = 0
+    samples: Sequence[Sample],
+    *,
+    fit_on: Sequence[Sample] | None = None,
+    folds: int = FOLDS,
+    seed: int = 0,
 ) -> Calibration | None:
-    """Fit T on all samples and report the cross-fitted ECE; None when no
-    judgement is a softmax (e.g. the lexicon backend)."""
-    keys = answer_set(samples)
+    """ECE before and after temperature scaling; None when no judgement is a
+    softmax (e.g. the lexicon backend). With `fit_on` (the dev set), T is
+    fitted there and applied to `samples`; otherwise T is fitted on all
+    samples and the ECE after scaling is cross-fitted."""
+    keys = answer_set([*samples, *(fit_on or [])])
     n_scaled = sum(s.distribution is not None for s in samples)
     if n_scaled < 2 or len(keys) < 2:
         return None
+    correct = [s.correct for s in samples]
+    before = round(expected_calibration_error([s.confidence for s in samples], correct), 4)
+    n_fit = sum(s.distribution is not None for s in fit_on or [])
+    if fit_on is not None and n_fit >= 2:
+        t = fit_temperature(fit_on, keys)
+        after = [scaled_confidence(s, t, keys) for s in samples]
+        return Calibration(
+            temperature=round(t, 3),
+            ece_before=before,
+            ece_after=round(expected_calibration_error(after, correct), 4),
+            folds=0,
+            n_scaled=n_scaled,
+            method="dev",
+            n_fit=n_fit,
+        )
     folds = max(2, min(folds, n_scaled))
     order = list(range(len(samples)))
     random.Random(seed).shuffle(order)
     fold_of = {i: pos % folds for pos, i in enumerate(order)}
-    after: list[float] = [0.0] * len(samples)
+    after = [0.0] * len(samples)
     for f in range(folds):
         train = [s for i, s in enumerate(samples) if fold_of[i] != f]
         t = fit_temperature(train, keys)
         for i, s in enumerate(samples):
             if fold_of[i] == f:
                 after[i] = scaled_confidence(s, t, keys)
-    correct = [s.correct for s in samples]
     return Calibration(
         temperature=round(fit_temperature(samples, keys), 3),
-        ece_before=round(expected_calibration_error([s.confidence for s in samples], correct), 4),
+        ece_before=before,
         ece_after=round(expected_calibration_error(after, correct), 4),
         folds=folds,
         n_scaled=n_scaled,
+        n_fit=n_scaled,
     )
