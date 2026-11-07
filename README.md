@@ -88,7 +88,7 @@ Stage 1 replaces the fixture with 300–500 real sentences from public sources, 
    ```
    Output: `fixtures/gold_v1_candidates.csv` with `text_id, text, source, a1, a2, tags, note`. Rule-based hints such as `negation?` stay unconfirmed until an annotator removes the `?`.
 3. **Annotate** following [docs/ANNOTATION.md](docs/ANNOTATION.md) — each person in an own copy, only their own column.
-4. **Merge into the gold set.** Copies are merged by `text_id`; `gold` is the majority label, `unclear` on dissent (an optional third column `a3` adjudicates). Every line is validated against `schema/gold.schema.json`; the script prints Cohen's κ (target ≥ 0.7) and the tag slices the stage-1 gate counts.
+4. **Merge into the gold set.** Copies are merged by `text_id`; `gold` is the majority label, `unclear` on dissent (an optional third column `a3` adjudicates). Every line is validated against `schema/gold.schema.json`; the script prints Cohen's κ (target ≥ 0.7) and the tag slices the stage-1 gate counts, and writes a fixed dev/test `split` (`--test-share`, default 0.6; whole documents on one side).
    ```bash
    python scripts/candidates_to_gold.py gold_v1_a1.csv gold_v1_a2.csv -o fixtures/gold_v1.jsonl
    ```
@@ -184,7 +184,7 @@ For backends whose distribution is a softmax (`encoder`, `llm-score`), `sentimen
 calibration: ECE 0.351 → 0.205 after temperature scaling (T=6.215, 5-fold cross-fitted, 29 of 30 judgements rescaled)
 ```
 
-T is fitted on the log-loss of the top label being right, the quantity ECE and the review gate read. A gold label outside a backend's answer set (the encoder has no `unclear`) cannot drive T to infinity that way. The ECE after scaling is 5-fold cross-fitted: no judgement is rescaled with a T fitted on itself. Scaling never changes which option wins, so accuracy and F1 stay as they are. Rule-based answers (an encoder's `not_mentioned` from clause scoping) keep their confidence. For `llm-score`, apply the fitted T with `SENTIMENTKIT_LLM_CALIBRATION_T`; it becomes part of `model_version`. The review thresholds stay in `policy.yaml`.
+T is fitted on the log-loss of the top label being right, the quantity ECE and the review gate read. A gold label outside a backend's answer set (the encoder has no `unclear`) cannot drive T to infinity that way. With `--split test`, T is fitted on the dev split and the ECE measured on test; otherwise the ECE after scaling is 5-fold cross-fitted. Either way no judgement is rescaled with a T fitted on itself. Scaling never changes which option wins, so accuracy and F1 stay as they are. Rule-based answers (an encoder's `not_mentioned` from clause scoping) keep their confidence. For `llm-score`, apply the fitted T with `SENTIMENTKIT_LLM_CALIBRATION_T`; it becomes part of `model_version`. The review thresholds stay in `policy.yaml`.
 
 Measured on the stage-0 fixture (30 synthetic German sentences). Qwen3-4B ran in bf16 via transformers on a CPU behind a stand-in server that answers `/v1/score` and `/api/generate` as SGLang 0.5.21 and the Ollama API documentation specify. These are not SGLang or Ollama themselves: their kernels and Ollama's 4-bit quantisation will shift the figures a little. Both scoring paths gave identical predictions on all 30 sentences.
 
@@ -209,13 +209,26 @@ Read these figures with care:
 - **It is confidently wrong.** All three errors have confidence 1.0, so the review gate does not catch them. The raw ECE of 0.096 is below the stage-2 bar only because 27 hits sit at the same 1.0. Cross-fitted temperature scaling makes it worse here (0.149): with errors as sure as hits, one temperature cannot separate them. Do not set `SENTIMENTKIT_LLM_CALIBRATION_T` from this fixture.
 - Speed on this CPU without bf16 support: about 17 s per question. That says nothing about a GPU or about Ollama on a Raspberry Pi; the Pi run the roadmap asks for is still open.
 
+### Gate tooling
+
+`sentimentkit eval` carries what the stage-2 decision needs. The proposed criteria are in [docs/ROADMAP.md](docs/ROADMAP.md); they are to be fixed before the run on `gold_v1`.
+
+- **`--split dev|test`**: `candidates_to_gold.py` writes a fixed split into the gold set: about 60 % test, whole documents on one side, seeded. With `--split test`, a softmax backend's temperature is fitted on the dev split and the ECE measured on test.
+- **`--gate-metric macro_f1_polar`**: macro-F1 over positive, neutral and negative only. `not_mentioned` is decided by the same keyword rule in every backend, so it says nothing about a model. The default stays `macro_f1`.
+- **Bootstrap interval**: `--compare` prints each candidate's gain over the baseline with a paired 95 % bootstrap interval, and whether it excludes 0. `--json` adds it under `gain`, and every result carries `gold_labels` and `predictions` for further paired tests.
+- **Review figures**: what the review gate in `policy.yaml` would route, and how many errors it catches (`review` in `--json`). A backend that is wrong with confidence 1.0 shows up here even when its F1 looks fine.
+
+```bash
+sentimentkit eval fixtures/gold_v1.jsonl --compare lexicon,encoder,llm-score --split test --gate-metric macro_f1_polar
+```
+
 ## Available Tools
 
 | Command | Description |
 |---|---|
 | `sentimentkit analyze INPUT --purpose P [--backend B] [--aspects A.yaml] [-o DIR]` | Judge every text; write atoms, run meta, review queue and report |
-| `sentimentkit eval GOLD.jsonl [--backend B] [--json]` | Metrics, tag slices, alt-test, calibration (ECE before/after temperature scaling), failure list |
-| `sentimentkit eval GOLD.jsonl --compare B1,B2[,…] [--json]` | Same gold set for every backend, side by side, plus `eval.beats_baseline()` against B1 |
+| `sentimentkit eval GOLD.jsonl [--backend B] [--split dev\|test] [--json]` | Metrics incl. polar macro-F1, tag slices, alt-test, calibration (ECE before/after temperature scaling), review figures, failure list |
+| `sentimentkit eval GOLD.jsonl --compare B1,B2[,…] [--gate-metric M] [--json]` | Same gold set for every backend, side by side, plus `eval.beats_baseline()` against B1 with a bootstrap interval |
 | `sentimentkit backends` | List backends: available, missing extra, or roadmap stage |
 | `sentimentkit policy-check [--policy FILE]` | Load the policy and print its hash |
 | `sentimentkit validate judgements.jsonl` | Validate atoms against the JSON schema |

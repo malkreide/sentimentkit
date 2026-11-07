@@ -2,7 +2,7 @@
 
     sentimentkit backends
     sentimentkit analyze INPUT --purpose media_resonance [--backend lexicon] [--aspects aspects.yaml] -o out/
-    sentimentkit eval GOLD.jsonl [--backend lexicon | --compare lexicon,encoder] [--json]
+    sentimentkit eval GOLD.jsonl [--backend lexicon | --compare lexicon,encoder] [--split test] [--json]
     sentimentkit policy-check [--policy policy.yaml]
     sentimentkit validate judgements.jsonl
 
@@ -22,7 +22,18 @@ from click.core import ParameterSource
 
 from . import __version__
 from .backends import Backend, BackendUnavailable, NotAvailable, available, get_backend
-from .eval import MIN_GAIN, EvalResult, beats_baseline, evaluate, load_gold
+from .eval import (
+    GATE_METRICS,
+    MIN_GAIN,
+    SPLITS,
+    EvalResult,
+    GoldInstance,
+    beats_baseline,
+    evaluate,
+    gain_interval,
+    load_gold,
+    select_split,
+)
 from .io import read_items, write_judgements, write_review_queue, write_run_meta
 from .models import Judgement
 from .pipeline import run as run_pipeline
@@ -150,6 +161,26 @@ def analyze(
     help="Measure several backends on the same gold set; the first is the baseline "
     "for eval.beats_baseline().",
 )
+@click.option(
+    "--split",
+    type=click.Choice(SPLITS),
+    default=None,
+    help="Only this split of the gold set. With test, the temperature is fitted on dev.",
+)
+@click.option(
+    "--gate-metric",
+    type=click.Choice(sorted(GATE_METRICS)),
+    default="macro_f1",
+    show_default=True,
+    help="Metric for eval.beats_baseline() and its bootstrap interval.",
+)
+@click.option(
+    "--policy",
+    "policy_path",
+    type=click.Path(exists=True, dir_okay=False),
+    default=None,
+    help="Review thresholds for the review figures (default: policy.yaml).",
+)
 @click.option("--json", "as_json", is_flag=True, help="Print the full result as JSON.")
 @click.option("--no-alt-test", is_flag=True)
 @click.pass_context
@@ -158,6 +189,9 @@ def eval_cmd(
     gold_path: str,
     backend_name: str,
     compare: str | None,
+    split: str | None,
+    gate_metric: str,
+    policy_path: str | None,
     as_json: bool,
     no_alt_test: bool,
 ) -> None:
@@ -170,15 +204,28 @@ def eval_cmd(
         if len(names) < 2 or len(set(names)) != len(names):
             _fail("--compare needs two or more different backends, e.g. lexicon,encoder")
     chosen = [_backend(n) for n in names]
+    pol = load_policy(policy_path)
     gold = load_gold(gold_path)
+    dev: list[GoldInstance] | None = None
+    if split is not None:
+        try:
+            if split == "test":
+                dev = [g for g in gold if g.split == "dev"] or None
+            gold = select_split(gold, split)
+        except ValueError as exc:
+            _fail(str(exc))
     try:
-        results = [evaluate(b, gold, with_alt_test=not no_alt_test) for b in chosen]
+        results = [
+            evaluate(b, gold, with_alt_test=not no_alt_test, calibration_gold=dev, policy=pol)
+            for b in chosen
+        ]
     except BackendUnavailable as exc:
         _fail(str(exc))
+    where = f"{gold_path}" + (f" · split {split}" if split else "")
     if compare is None:
         _print_result(results[0], as_json)
     else:
-        _print_comparison(gold_path, results, as_json)
+        _print_comparison(where, results, as_json, gate_metric)
 
 
 def _print_result(res: EvalResult, as_json: bool) -> None:
@@ -187,10 +234,12 @@ def _print_result(res: EvalResult, as_json: bool) -> None:
         return
     click.echo(f"backend {res.backend} ({res.model_version}) · n={res.n}")
     click.echo(
-        f"accuracy {res.accuracy:.3f} · macro-F1 {res.macro_f1:.3f} · "
-        f"kappa {res.kappa_vs_gold:.3f} · ECE {res.ece:.3f}"
+        f"accuracy {res.accuracy:.3f} · macro-F1 {res.macro_f1:.3f} "
+        f"(polar {res.macro_f1_polar:.3f}) · kappa {res.kappa_vs_gold:.3f} · ECE {res.ece:.3f}"
     )
     click.echo(_calibration_line(res))
+    if res.review:
+        click.echo(_review_line(res))
     for tag, row in res.by_tag.items():
         click.echo(f"  {tag:14} n={row['n']:<3} acc={row['accuracy']:.2f}")
     if res.alt_test:
@@ -207,30 +256,55 @@ def _calibration_line(res: EvalResult) -> str:
     c = res.calibration
     if c is None:
         return "calibration: n/a — temperature scaling needs a softmax distribution"
+    how = (
+        f"T fitted on {c['n_fit']} dev judgements"
+        if c["method"] == "dev"
+        else f"{c['folds']}-fold cross-fitted"
+    )
     return (
         f"calibration: ECE {c['ece_before']:.3f} → {c['ece_after']:.3f} after temperature "
-        f"scaling (T={c['temperature']:g}, {c['folds']}-fold cross-fitted, "
-        f"{c['n_scaled']} of {res.n} judgements rescaled)"
+        f"scaling (T={c['temperature']:g}, {how}, {c['n_scaled']} of {res.n} judgements rescaled)"
     )
 
 
-def _print_comparison(gold_path: str, results: list[EvalResult], as_json: bool) -> None:
+def _review_line(res: EvalResult) -> str:
+    r = res.review
+    caught = (
+        f"catches {r['errors_caught']} of {r['errors']} errors ({r['capture']:.0%})"
+        if r["errors"]
+        else "no errors to catch"
+    )
+    return (
+        f"review gate: {r['n_review']} of {res.n} to review ({r['review_rate']:.0%}), {caught} "
+        f"— threshold {r['review_threshold']:g}, margin {r['review_margin']:g} (policy.yaml)"
+    )
+
+
+def _print_comparison(
+    where: str, results: list[EvalResult], as_json: bool, gate_metric: str
+) -> None:
     baseline, candidates = results[0], results[1:]
-    verdicts = {c.backend: beats_baseline(c, baseline) for c in candidates}
+    verdicts = {c.backend: beats_baseline(c, baseline, metric=gate_metric) for c in candidates}
+    gains = {c.backend: gain_interval(c, baseline, metric=gate_metric) for c in candidates}
     if as_json:
         payload = {
-            "gold": gold_path,
+            "gold": where,
             "baseline": baseline.backend,
+            "gate_metric": gate_metric,
             "min_gain": MIN_GAIN,
             "beats_baseline": verdicts,
+            "gain": {
+                name: {"gain": round(g, 4), "ci95": [round(lo, 4), round(hi, 4)]}
+                for name, (g, lo, hi) in gains.items()
+            },
             "results": [r.to_dict() for r in results],
         }
         click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
         return
-    click.echo(f"gold {gold_path} · n={baseline.n} · baseline {baseline.backend}")
+    click.echo(f"gold {where} · n={baseline.n} · baseline {baseline.backend}")
     click.echo(
-        f"{'backend':10} {'acc':>6} {'macro-F1':>8} {'kappa':>6} {'ECE':>6} {'ECE-TS':>6}"
-        "  alt-test  model"
+        f"{'backend':10} {'acc':>6} {'macro-F1':>8} {'polar':>6} {'kappa':>6} {'ECE':>6} "
+        f"{'ECE-TS':>6}  alt-test  model"
     )
     for r in results:
         alt = (
@@ -240,8 +314,8 @@ def _print_comparison(gold_path: str, results: list[EvalResult], as_json: bool) 
         )
         ece_ts = f"{r.calibration['ece_after']:6.3f}" if r.calibration else f"{'—':>6}"
         click.echo(
-            f"{r.backend:10} {r.accuracy:6.3f} {r.macro_f1:8.3f} {r.kappa_vs_gold:6.3f} "
-            f"{r.ece:6.3f} {ece_ts}  {alt:8}  {r.model_version}"
+            f"{r.backend:10} {r.accuracy:6.3f} {r.macro_f1:8.3f} {r.macro_f1_polar:6.3f} "
+            f"{r.kappa_vs_gold:6.3f} {r.ece:6.3f} {ece_ts}  {alt:8}  {r.model_version}"
         )
     if baseline.by_tag:
         click.echo("tag slices (accuracy):")
@@ -252,12 +326,16 @@ def _print_comparison(gold_path: str, results: list[EvalResult], as_json: bool) 
     for r in results:
         if r.calibration:
             click.echo(f"{r.backend}: {_calibration_line(r)}")
+    for r in results:
+        if r.review:
+            click.echo(f"{r.backend}: {_review_line(r)}")
     for c in candidates:
-        gain = c.macro_f1 - baseline.macro_f1
+        gain, low, high = gains[c.backend]
         click.echo(
             f"eval.beats_baseline({c.backend}, {baseline.backend}): "
-            f"{'yes' if verdicts[c.backend] else 'no'} — macro-F1 {gain:+.3f}, "
-            f"gate +{MIN_GAIN:.2f}"
+            f"{'yes' if verdicts[c.backend] else 'no'} — {gate_metric} {gain:+.3f}, "
+            f"95% CI [{low:+.3f}, {high:+.3f}]"
+            f"{' excludes 0' if low > 0 or high < 0 else ' includes 0'}, gate +{MIN_GAIN:.2f}"
         )
 
 
