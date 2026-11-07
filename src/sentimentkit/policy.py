@@ -2,8 +2,8 @@
 
 The policy file is loaded once per run, hashed into the run metadata, and
 enforced at two points: before the backend runs (purpose, person identifiers,
-anonymisation) and before aggregation (k-anonymity floor). Violations raise
-``PolicyViolation``; the CLI maps that to exit code 2.
+anonymisation, where texts are sent) and before aggregation (k-anonymity
+floor). Violations raise ``PolicyViolation``; the CLI maps that to exit code 2.
 """
 
 from __future__ import annotations
@@ -11,6 +11,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field
@@ -37,6 +38,9 @@ class Policy(BaseModel):
     aggregation_floor: int = 20
     cloud_backends: list[str] = Field(default_factory=list)
     cloud_backends_require_anonymized: bool = True
+    local_scoring_hosts: list[str] = Field(
+        default_factory=lambda: ["localhost", "127.0.0.1", "::1"]
+    )
     review_threshold: float = 0.6
     review_margin: float = 0.2
 
@@ -54,6 +58,7 @@ class Policy(BaseModel):
         anonymized: bool,
         dimensions: Iterable[str] = (),
         context: str | None = None,
+        endpoint: str | None = None,
     ) -> None:
         if self.purpose_required and not purpose:
             raise PolicyViolation("purpose is required (policy.purpose_required)")
@@ -73,6 +78,29 @@ class Policy(BaseModel):
         ):
             raise PolicyViolation(
                 f"backend {backend!r} is a cloud backend; input must be declared anonymised"
+            )
+        if endpoint is not None:
+            self.check_endpoint(backend, endpoint, anonymized=anonymized)
+
+    def check_endpoint(self, backend: str, endpoint: str, *, anonymized: bool) -> None:
+        """A backend that sends texts to a server (llm-score) is local only for
+        a host in `local_scoring_hosts`; any other host counts as a cloud backend
+        and must be reached over https."""
+        parts = urlsplit(endpoint)
+        host = (parts.hostname or "").rstrip(".")
+        if not host:
+            raise PolicyViolation(f"backend {backend!r}: no host in endpoint {endpoint!r}")
+        if host in {h.lower().strip("[]") for h in self.local_scoring_hosts}:
+            return
+        if parts.scheme != "https":
+            raise PolicyViolation(
+                f"backend {backend!r} would send texts to {host} over {parts.scheme or 'no scheme'}; "
+                "a host outside policy.local_scoring_hosts needs https"
+            )
+        if self.cloud_backends_require_anonymized and not anonymized:
+            raise PolicyViolation(
+                f"backend {backend!r} sends texts to {host}, which is not in "
+                "policy.local_scoring_hosts; input must be declared anonymised"
             )
 
     def check_items(self, items: Iterable[TextItem]) -> None:

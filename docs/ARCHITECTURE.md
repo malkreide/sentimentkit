@@ -32,8 +32,9 @@ und Fixed-Answer-Scoring eines LLM werden so vergleichbar.
    (`{aspekt: [terme]}`); pro Aspekt ein Urteil, Teilsatz-Scoping bei Kontrast.
 4. **Governance als Code.** `policy.yaml` wird gehasht (`RunMeta.policy_hash`)
    und an zwei Stellen erzwungen: vor dem Backend (Zweck, Personenbezug,
-   Anonymisierung, verbotene Dimensionen/Kontexte) und bei der Aggregation
-   (k-Anonymitäts-Untergrenze). Verstoss = Exit 2.
+   Anonymisierung, verbotene Dimensionen/Kontexte, Ziel-Host eines
+   Scoring-Servers) und bei der Aggregation (k-Anonymitäts-Untergrenze).
+   Verstoss = Exit 2.
 
 ## Deutsch-spezifische Regeln im Lexikon-Backend
 

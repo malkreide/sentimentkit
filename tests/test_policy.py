@@ -68,3 +68,55 @@ def test_policy_file_forbids_extra_keys(tmp_path):
     p.write_text("version: 1\nsurprise: true\n", encoding="utf-8")
     with pytest.raises(ValidationError):
         load_policy(p)
+
+
+@pytest.mark.parametrize(
+    "endpoint",
+    [
+        "http://localhost:30000",
+        "http://127.0.0.1:11434",
+        "http://[::1]:30000",
+        "http://LOCALHOST:1",
+    ],
+)
+def test_local_scoring_host_passes(policy, endpoint):
+    policy.check_run(purpose="evaluation", backend="llm-score", anonymized=False, endpoint=endpoint)
+
+
+def test_remote_scoring_host_counts_as_cloud(policy):
+    remote = "https://gpu.example.org:30000"
+    with pytest.raises(PolicyViolation, match="not in policy.local_scoring_hosts"):
+        policy.check_run(
+            purpose="evaluation", backend="llm-score", anonymized=False, endpoint=remote
+        )
+    policy.check_run(purpose="evaluation", backend="llm-score", anonymized=True, endpoint=remote)
+
+
+def test_remote_scoring_host_needs_https(policy):
+    with pytest.raises(PolicyViolation, match="needs https"):
+        policy.check_run(
+            purpose="evaluation",
+            backend="llm-score",
+            anonymized=True,
+            endpoint="http://gpu.example.org:30000",
+        )
+
+
+def test_approved_host_is_local(policy):
+    approved = Policy.model_validate(
+        {**policy.model_dump(), "local_scoring_hosts": ["localhost", "gpu01.intern"]}
+    )
+    approved.check_run(
+        purpose="evaluation",
+        backend="llm-score",
+        anonymized=False,
+        endpoint="http://gpu01.intern:30000",
+    )
+    assert approved.hash != policy.hash  # the approval is visible in every run
+
+
+def test_endpoint_without_host_is_refused(policy):
+    with pytest.raises(PolicyViolation, match="no host"):
+        policy.check_run(
+            purpose="evaluation", backend="llm-score", anonymized=False, endpoint="localhost:30000"
+        )

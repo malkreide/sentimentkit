@@ -60,6 +60,15 @@ cloud_backends:
   - llm-cloud
 cloud_backends_require_anonymized: true
 
+# A backend that sends texts to a server (llm-score) is local only while that
+# server is one of these hosts. Any other host counts as a cloud backend: the
+# run must assert anonymised input, and plain http is refused. Add an internal
+# host only after it has been approved; the change shows in the policy hash.
+local_scoring_hosts:
+  - localhost
+  - 127.0.0.1
+  - "::1"
+
 # Judgements below this confidence are routed to the human review queue.
 review_threshold: 0.6
 # Minimum margin between the top two options (distribution-based backends).
