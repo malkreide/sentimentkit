@@ -19,6 +19,41 @@ sich mit den Mitteln des Repos prüfen lassen (`sentimentkit eval`, Tests, CI).
 - **Name.** `sentimentkit` passt in die Reihe journeykit/personakit/dealkit; `tonekit` hätte mehr Abstand zum Begriff Emotionserkennung.
 - **Decompounding.** Suffix-Match reicht für Stufe 0; CharSplit o. ä. erst, wenn das Gold-Set zeigt, dass Komposita ein messbares Problem sind.
 
+## Gate der Stufe 2: Vorschlag, vor dem Lauf auf `gold_v1` zu beschliessen
+
+Auf dem Fixture (30 Sätze) hat ein einziger Satz `beats_baseline()` von nein
+auf ja gekippt. Damit der Entscheid auf `fixtures/gold_v1.jsonl` trägt,
+werden Kennzahl und Schwellen festgelegt, *bevor* jemand misst. Status:
+**Vorschlag, Beschluss offen.**
+
+1. **Split.** `scripts/candidates_to_gold.py` teilt das Gold-Set fest auf:
+   rund 60 % `test`, 40 % `dev`, ganze Dokumente auf eine Seite, Seed 0.
+   Kalibriert und abgestimmt wird nur auf `dev`; `test` wird pro Entscheid
+   genau einmal ausgewertet.
+2. **Hauptkennzahl:** `macro_f1_polar`, der Macro-F1 über positiv, neutral
+   und negativ. `not_mentioned` entscheidet bei allen Backends dieselbe
+   Schlüsselwort-Regel und misst keine Modellqualität; `unclear` wird
+   separat berichtet (der Encoder kann es nicht ausgeben).
+3. **Gewinn:** mindestens +0.05 gegenüber dem Lexikon, und das gepaarte
+   95-%-Bootstrap-Intervall schliesst 0 aus. Schliesst es 0 ein, ist der
+   Entscheid vertagt und das Gold-Set wird vergrössert.
+4. **Übereinstimmung und Kalibrierung:** alt-test ω ≥ 0.5; ECE < 0.10 auf
+   `test` mit der Temperatur aus `dev`.
+5. **Fangquote:** Mindestens *X* % der Fehler landen in der Review-Queue,
+   bei höchstens *Y* % Prüfvolumen, mit den Schwellen aus `policy.yaml`.
+   *X* und *Y* sind ein Führungsentscheid: Wie viel Prüfaufwand pro
+   Auswertung ist vertretbar?
+6. **Slices:** negation, irony, dialect und aspect werden berichtet. Ob ein
+   Slice ein Ausschlusskriterium ist, wird hier festgelegt. Risiko: In
+   Medientexten und Ratsvoten sind Dialekt und Ironie selten; die Vorgabe
+   «je ≥ 20» der Stufe 1 braucht gezielte Auswahl oder eine bewusste
+   Abschwächung.
+
+```bash
+sentimentkit eval fixtures/gold_v1.jsonl --compare lexicon,encoder,llm-score \
+  --split test --gate-metric macro_f1_polar --json > out/gate_stage2.json
+```
+
 ## Prompts für die nächsten Claude-Code-Sessions
 
 1. *Stufe 1:* «Lies docs/ROADMAP.md und docs/ARCHITECTURE.md. Baue `scripts/build_gold_candidates.py`, das aus einer JSONL mit Medienartikeln Sätze mit Schulbezug zieht, dedupliziert und als Annotationsvorlage (`fixtures/gold_v1_candidates.csv`, Spalten text_id, text, a1, a2, tags) schreibt. Keine Modelle, nur Regeln.»
