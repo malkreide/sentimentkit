@@ -203,6 +203,10 @@ class LLMScoreBackend(Backend):
 
     # -------------------------------------------------------------- set-up
     @property
+    def endpoint(self) -> str:
+        return self.base_url
+
+    @property
     def note(self) -> str:
         return f"{self.scorer} · {self.model} · {self.base_url}"
 

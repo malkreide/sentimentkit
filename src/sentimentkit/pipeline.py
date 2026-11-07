@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
+from urllib.parse import urlsplit
 
 from . import __version__
 from .backends import get_backend
@@ -45,6 +46,7 @@ def run(
         anonymized=anonymized,
         dimensions=dimensions,
         context=context,
+        endpoint=backend_obj.endpoint,
     )
     policy.check_items(items)
 
@@ -58,6 +60,9 @@ def run(
         n_items=len(items),
         params={"aspects": sorted(aspects) if aspects else []},
     )
+    if backend_obj.endpoint:  # where the texts went, without any credentials in the URL
+        parts = urlsplit(backend_obj.endpoint)
+        meta.params["endpoint"] = parts._replace(netloc=parts.netloc.rpartition("@")[2]).geturl()
 
     targets: list[tuple[str, tuple[str, ...]]] = [("overall", ())]
     if aspects:

@@ -20,7 +20,7 @@ Stage 0 ships a transparent lexicon-and-rules baseline for German (negation incl
 - **Backend comparison** on one gold set: `sentimentkit eval GOLD --compare lexicon,encoder` prints metrics, tag slices and the stage-2 gate `eval.beats_baseline()`
 - **Evidence atoms** (`schema/judgement.schema.json`): polarity, signed intensity, confidence, per-option distribution, evidence cues, provenance, human-verification fields
 - **Aspect-based** judgements from a YAML of typed questions, with clause-level scoping (`"gut, aber der Mittagstisch ein Chaos"`)
-- **Policy as code** (`policy.yaml`): declared purpose, forbidden dimensions (political leaning, person emotion, biometrics), no per-person profiles, k-anonymity floor for aggregation, anonymisation requirement for cloud backends — violations exit with code 2
+- **Policy as code** (`policy.yaml`): declared purpose, forbidden dimensions (political leaning, person emotion, biometrics), no per-person profiles, k-anonymity floor for aggregation, anonymisation requirement for cloud backends and for scoring servers outside an allowlist of hosts — violations exit with code 2
 - **Eval harness**: accuracy, macro-F1, Cohen's kappa, ECE, tag slices, and the Alternative Annotator Test (Calderon et al. 2025) in pure Python
 - **Calibration**: `sentimentkit eval` reports ECE before and after temperature scaling (cross-fitted) and the temperature to configure; the review thresholds stay in `policy.yaml`
 - **Human gate**: confidence threshold and top-2 margin route judgements to `review_queue.csv`
@@ -174,7 +174,7 @@ ollama pull qwen3:4b
 SENTIMENTKIT_LLM_SCORER=ollama sentimentkit eval fixtures/de_synthetic_gold.jsonl --backend llm-score
 ```
 
-**Texts go to the scoring server.** The policy treats `llm-score` as a local backend; that holds only while `SENTIMENTKIT_LLM_BASE_URL` points at a machine you run. Qwen3-4B is Apache-2.0.
+**Texts go to the scoring server, so the policy checks where it is.** Only a host in `local_scoring_hosts` in `policy.yaml` counts as local (`localhost`, `127.0.0.1` and `::1` by default). Any other host counts as a cloud backend: the run must be declared `--anonymized`, the server must be reached over `https`, otherwise the run stops with exit code 2 before a single text is sent. `analyze` and `eval` both check it, and `run.json` records the endpoint under `params.endpoint`. Add an internal GPU server to the list only once it has been approved; the change shows in the policy hash of every run. Qwen3-4B is Apache-2.0.
 
 ### Calibration
 
@@ -214,7 +214,7 @@ Read these figures with care:
 | Command | Description |
 |---|---|
 | `sentimentkit analyze INPUT --purpose P [--backend B] [--aspects A.yaml] [-o DIR]` | Judge every text; write atoms, run meta, review queue and report |
-| `sentimentkit eval GOLD.jsonl [--backend B] [--json]` | Metrics, tag slices, alt-test, calibration (ECE before/after temperature scaling), failure list |
+| `sentimentkit eval GOLD.jsonl [--backend B] [--json] [--anonymized]` | Metrics, tag slices, alt-test, calibration (ECE before/after temperature scaling), failure list; checked against the policy with purpose `evaluation` |
 | `sentimentkit eval GOLD.jsonl --compare B1,B2[,…] [--json]` | Same gold set for every backend, side by side, plus `eval.beats_baseline()` against B1 |
 | `sentimentkit backends` | List backends: available, missing extra, or roadmap stage |
 | `sentimentkit policy-check [--policy FILE]` | Load the policy and print its hash |
